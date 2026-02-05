@@ -6,3 +6,6 @@ pgvector
 pydantic-settings
 alembic
 python-dotenv
+passlib[bcrypt]
+pyjwt
+python-multipart

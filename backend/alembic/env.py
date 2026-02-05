@@ -27,6 +27,7 @@ if config.config_file_name is not None:
 from app.database import Base
 from app.models.location import County, Constituency, Ward
 from app.models.speech import SpeechSegment
+from app.models.user import User
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
