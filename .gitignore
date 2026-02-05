@@ -151,3 +151,21 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Web (Vite)
+dist/
+dist-ssr/
+*.local
+
+# Mobile (Expo)
+.expo/
+web-build/
+*.jks
+*.p12
+*.key
+*.keystore
