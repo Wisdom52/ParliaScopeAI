@@ -12,3 +12,5 @@ python-multipart
 pdfplumber
 fuzzywuzzy
 python-Levenshtein
+sentence-transformers
+ollama

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, ingest
+from app.routes import auth, ingest, chat
 
 app = FastAPI(title="ParliaScope API")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(ingest.router)
+app.include_router(chat.router)
 
 @app.get("/")
 async def root():

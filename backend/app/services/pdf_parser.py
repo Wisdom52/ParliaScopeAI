@@ -5,6 +5,7 @@ from fuzzywuzzy import process
 from sqlalchemy.orm import Session
 from app.models.speech import SpeechSegment
 from app.models.speaker import Speaker
+from app.services.embedding import get_embedding
 
 def extract_text_from_pdf(pdf_file) -> str:
     """Extracts raw text from a PDF file-like object."""
@@ -93,7 +94,7 @@ def process_hansard_pdf(pdf_file, db: Session) -> int:
             speaker_name=speaker_name,
             content=content,
             speaker_id=speaker_obj.id if speaker_obj else None,
-            embedding=None # will be populated by AI service later
+            embedding=get_embedding(content) # Generate embedding
         )
         db.add(new_segment)
         saved_count += 1
