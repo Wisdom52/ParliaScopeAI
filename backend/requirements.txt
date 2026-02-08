@@ -9,3 +9,6 @@ python-dotenv
 passlib[bcrypt]
 pyjwt
 python-multipart
+pdfplumber
+fuzzywuzzy
+python-Levenshtein
