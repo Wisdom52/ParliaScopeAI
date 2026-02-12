@@ -14,3 +14,5 @@ fuzzywuzzy
 python-Levenshtein
 sentence-transformers
 ollama
+edge-tts
+aiofiles
