@@ -21,9 +21,6 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title }) => {
             <audio
                 ref={audioRef}
                 src={src}
-                onEnded={() => setIsPlaying(false)}
-                onPause={() => setIsPlaying(false)}
-                onPlay={() => setIsPlaying(true)}
                 controls
                 style={{ width: '100%', marginTop: '0.5rem' }}
             />
