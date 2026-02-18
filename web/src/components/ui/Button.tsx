@@ -1,5 +1,5 @@
 import React from 'react';
-import { ButtonProps } from '@shared/ui/types';
+import type { ButtonProps } from '@shared/ui/types';
 import { tokens } from '@shared/tokens';
 
 export const Button: React.FC<ButtonProps> = ({ label, onPress, variant = 'primary', disabled }) => {

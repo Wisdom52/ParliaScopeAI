@@ -1,5 +1,5 @@
 import React from 'react';
-import { ModalProps } from '@shared/ui/types';
+import type { ModalProps } from '@shared/ui/types';
 import { tokens } from '@shared/tokens';
 import { Button } from './Button';
 

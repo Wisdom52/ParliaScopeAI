@@ -10,4 +10,11 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, '../shared'),
     },
   },
+  server: {
+    fs: {
+      allow: [
+        path.resolve(__dirname, '..'), // Allow serving files from parent (for shared/)
+      ],
+    },
+  },
 })

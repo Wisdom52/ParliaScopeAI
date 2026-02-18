@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { SignupRequest } from '@shared/types/auth'; // Ensure alias works or relative path
+import { SignupRequest } from '@shared/types/auth';
+import { API_BASE_URL } from '../config/api';
 
 // Mock Data
 const MOCK_COUNTIES = [
@@ -15,7 +16,11 @@ const MOCK_WARDS = {
     2: [{ id: 201, name: 'Nyali' }, { id: 202, name: 'Likoni' }],
 };
 
-export const OnboardingScreen: React.FC = () => {
+interface Props {
+    onComplete: () => void;
+}
+
+export const OnboardingScreen: React.FC<Props> = ({ onComplete }) => {
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState<SignupRequest>({
         county_id: 0,
@@ -27,7 +32,7 @@ export const OnboardingScreen: React.FC = () => {
     const handleSubmit = async () => {
         try {
             // Replace with actual IP for simulator (10.0.2.2 for Android, LAN IP for physical device)
-            const response = await fetch('http://10.0.2.2:8000/auth/signup', {
+            const response = await fetch(`${API_BASE_URL}/auth/signup`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -36,7 +41,7 @@ export const OnboardingScreen: React.FC = () => {
             });
             const data = await response.json();
             if (response.ok) {
-                Alert.alert('Success', 'Account Created!');
+                onComplete();
             } else {
                 Alert.alert('Error', data.detail);
             }
@@ -123,6 +128,13 @@ export const OnboardingScreen: React.FC = () => {
                     </View>
                 </View>
             )}
+
+            <TouchableOpacity
+                onPress={onComplete}
+                style={{ marginTop: 30, alignItems: 'center' }}
+            >
+                <Text style={{ color: '#007AFF', fontSize: 16 }}>Skip — continue as guest →</Text>
+            </TouchableOpacity>
         </View>
     );
 };

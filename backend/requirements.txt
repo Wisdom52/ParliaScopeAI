@@ -7,7 +7,7 @@ pydantic-settings
 alembic
 python-dotenv
 passlib[bcrypt]
-pyjwt
+python-jose[cryptography]
 python-multipart
 pdfplumber
 fuzzywuzzy
@@ -16,3 +16,4 @@ sentence-transformers
 ollama
 edge-tts
 aiofiles
+pydantic[email]

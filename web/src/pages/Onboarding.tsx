@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { SignupRequest } from '@shared/types/auth'; // Ensure this alias works or use relative path
+import type { SignupRequest } from '@shared/types/auth';
 
 // Mock Data for Counties and Wards
 const MOCK_COUNTIES = [
@@ -14,7 +14,11 @@ const MOCK_WARDS = {
     2: [{ id: 201, name: 'Nyali' }, { id: 202, name: 'Likoni' }],
 };
 
-export const Onboarding: React.FC = () => {
+interface Props {
+    onComplete: () => void;
+}
+
+export const Onboarding: React.FC<Props> = ({ onComplete }) => {
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState<SignupRequest>({
         county_id: 0,
@@ -45,7 +49,7 @@ export const Onboarding: React.FC = () => {
             });
             const data = await response.json();
             if (response.ok) {
-                alert('Registration Successful!');
+                onComplete();
             } else {
                 alert(`Error: ${data.detail}`);
             }
@@ -115,6 +119,14 @@ export const Onboarding: React.FC = () => {
                     </div>
                 </>
             )}
+            <p style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                <button
+                    onClick={onComplete}
+                    style={{ background: 'none', border: 'none', color: '#007AFF', cursor: 'pointer', fontSize: '0.95rem' }}
+                >
+                    Skip — continue as guest →
+                </button>
+            </p>
         </div>
     );
 };

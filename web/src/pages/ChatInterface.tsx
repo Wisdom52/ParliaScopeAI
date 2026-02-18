@@ -53,49 +53,61 @@ export const ChatInterface: React.FC = () => {
     };
 
     return (
-        <div style={{ maxWidth: '800px', margin: '2rem auto', padding: '1rem', display: 'flex', flexDirection: 'column', height: '80vh' }}>
-            <h2>Chat with Hansard</h2>
-
-            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1rem', border: '1px solid #ddd', borderRadius: '8px', padding: '1rem' }}>
-                {messages.length === 0 && <p style={{ color: '#888', textAlign: 'center' }}>Ask a question about parliamentary proceedings...</p>}
-                {messages.map((msg, idx) => (
-                    <div key={idx} style={{
-                        marginBottom: '1rem',
-                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                        maxWidth: '80%',
-                        backgroundColor: msg.role === 'user' ? '#e3f2fd' : '#f5f5f5',
-                        padding: '10px',
-                        borderRadius: '8px'
-                    }}>
-                        <strong>{msg.role === 'user' ? 'You' : 'ParliaScope AI'}:</strong>
-                        <p style={{ margin: '5px 0' }}>{msg.content}</p>
-                        {msg.sources && msg.sources.length > 0 && (
-                            <div style={{ fontSize: '0.85rem', marginTop: '5px', borderTop: '1px solid #ccc', paddingTop: '5px' }}>
-                                <strong>Sources:</strong>
-                                <ul>
-                                    {msg.sources.map(src => (
-                                        <li key={src.id}>
-                                            <em>{src.speaker}</em>: "{src.preview}"
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-                ))}
-                {loading && <p>Thinking...</p>}
+        <div className="chat-container">
+            <div className="chat-header">
+                <h2>Chat with Hansard</h2>
+                <p className="subtitle">Ask specific questions and get answers cited from official transcripts</p>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-                <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Type your question..."
-                    style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-                />
-                <Button label="Send" onPress={handleSend} disabled={loading} />
+            <div className="chat-messages-wrapper">
+                {messages.length === 0 && (
+                    <div className="chat-empty-state">
+                        <p>Ask a question about parliamentary proceedings... Try "What was discussed about the budget?"</p>
+                    </div>
+                )}
+                {messages.map((msg, idx) => (
+                    <div key={idx} className={`chat-message ${msg.role}`}>
+                        <div className="message-bubble">
+                            <div className="message-role">
+                                {msg.role === 'user' ? 'You' : 'ParliaScope AI'}
+                            </div>
+                            <div className="message-text">{msg.content}</div>
+                            {msg.sources && msg.sources.length > 0 && (
+                                <div className="message-sources">
+                                    <div className="sources-label">Sources:</div>
+                                    <ul className="sources-list">
+                                        {msg.sources.map(src => (
+                                            <li key={src.id} className="source-item">
+                                                <span className="source-speaker">{src.speaker}</span>: "{src.preview}"
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+                {loading && (
+                    <div className="chat-message assistant loading">
+                        <div className="message-bubble">
+                            <div className="loading-dots">Thinking...</div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="chat-input-area">
+                <div className="chat-input-wrapper">
+                    <input
+                        type="text"
+                        className="chat-input"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder="Type your question..."
+                    />
+                    <Button label="Send" onPress={handleSend} disabled={loading} />
+                </div>
             </div>
         </div>
     );

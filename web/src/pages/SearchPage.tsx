@@ -49,53 +49,59 @@ export const SearchPage: React.FC = () => {
     };
 
     return (
-        <div style={{ maxWidth: '1000px', margin: '2rem auto', padding: '1rem', display: 'flex', gap: '2rem' }}>
-            <div style={{ flex: 1 }}>
-                <h2>Unified Search</h2>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
+        <div className="search-page-container">
+            <div className="search-main-content">
+                <div className="page-header">
+                    <h2>Unified Search</h2>
+                    <p className="subtitle">AI-powered hybrid search through parliamentary transcripts</p>
+                </div>
+
+                <div className="search-input-group">
                     <Input
-                        placeholder="Search for topics, speakers..."
+                        placeholder="Search topics, speakers, or keywords..."
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onChangeText={(text) => setQuery(text)}
                     />
                     <Button label="Search" onPress={handleSearch} disabled={loading} />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {loading && <p>Searching...</p>}
-                    {results.map(r => (
-                        <div key={r.id} style={{
-                            padding: '1rem',
-                            border: '1px solid #ddd',
-                            borderRadius: '8px',
-                            backgroundColor: '#fff'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                <strong>{r.speaker_name}</strong>
-                                <span style={{ color: '#666', fontSize: '0.9rem' }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                <div className="results-container">
+                    {loading && <div className="loading-state">Searching Hansard...</div>}
+                    <div className="results-grid">
+                        {results.map(r => (
+                            <div key={r.id} className="result-card">
+                                <div className="result-card-header">
+                                    <span className="speaker-name">{r.speaker_name}</span>
+                                    <span className="result-date">{new Date(r.created_at).toLocaleDateString()}</span>
+                                </div>
+                                <div className="result-content">
+                                    <p>{r.content}</p>
+                                </div>
                             </div>
-                            <p>{r.content}</p>
-                        </div>
-                    ))}
-                    {!loading && results.length === 0 && query && <p>No results found.</p>}
+                        ))}
+                    </div>
+                    {!loading && results.length === 0 && query && (
+                        <div className="empty-state">No matching transcripts found.</div>
+                    )}
                 </div>
             </div>
 
-            <div style={{ width: '250px', borderLeft: '1px solid #eee', paddingLeft: '1rem' }}>
-                <h3>Recent Searches</h3>
-                <ul style={{ listStyle: 'none', padding: 0 }}>
-                    {history.map((h, i) => (
-                        <li key={i} style={{
-                            padding: '0.5rem 0',
-                            borderBottom: '1px solid #f0f0f0',
-                            cursor: 'pointer',
-                            color: '#007bff'
-                        }} onClick={() => { setQuery(h.query); handleSearch(); }}>
-                            {h.query}
-                        </li>
-                    ))}
-                </ul>
-            </div>
+            <aside className="search-sidebar">
+                <div className="sidebar-section">
+                    <h3>Recent Searches</h3>
+                    <ul className="history-list">
+                        {history.length > 0 ? (
+                            history.map((h, i) => (
+                                <li key={i} className="history-item" onClick={() => { setQuery(h.query); handleSearch(); }}>
+                                    {h.query}
+                                </li>
+                            ))
+                        ) : (
+                            <li className="history-empty">No recent searches</li>
+                        )}
+                    </ul>
+                </div>
+            </aside>
         </div>
     );
 };

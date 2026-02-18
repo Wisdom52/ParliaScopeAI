@@ -1,5 +1,5 @@
 import React from 'react';
-import { InputProps } from '@shared/ui/types';
+import type { InputProps } from '@shared/ui/types';
 import { tokens } from '@shared/tokens';
 
 export const Input: React.FC<InputProps> = ({ value, onChangeText, placeholder, secureTextEntry }) => {
