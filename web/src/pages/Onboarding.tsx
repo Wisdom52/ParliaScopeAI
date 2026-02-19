@@ -1,132 +1,306 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import type { SignupRequest } from '@shared/types/auth';
+import { useAuth } from '../context/AuthContext';
+import { MapModal } from '../components/MapModal';
 
-// Mock Data for Counties and Wards
-const MOCK_COUNTIES = [
-    { id: 1, name: 'Nairobi' },
-    { id: 2, name: 'Mombasa' },
-];
 
-const MOCK_WARDS = {
-    1: [{ id: 101, name: 'Kilmimani' }, { id: 102, name: 'Westlands' }],
-    2: [{ id: 201, name: 'Nyali' }, { id: 202, name: 'Likoni' }],
-};
 
 interface Props {
     onComplete: () => void;
 }
 
 export const Onboarding: React.FC<Props> = ({ onComplete }) => {
-    const [step, setStep] = useState(1);
-    const [formData, setFormData] = useState<SignupRequest>({
+    const { login: saveToken } = useAuth();
+    const [mode, setMode] = useState<'signup' | 'login'>('login');
+    const [formData, setFormData] = useState<any>({
         county_id: 0,
-        ward_id: 0,
+        constituency_id: 0,
         email: '',
         password: '',
+        full_name: '',
+        id_number: '',
+        password_confirm: '',
+        latitude: null,
+        longitude: null,
     });
+    const [countySearch, setCountySearch] = useState('');
+    const [constituencySearch, setConstituencySearch] = useState('');
+    const [counties, setCounties] = useState<any[]>([]);
+    const [constituencies, setConstituencies] = useState<any[]>([]);
+    const [isMapOpen, setIsMapOpen] = useState(false);
+    const [showCountyResults, setShowCountyResults] = useState(false);
+    const [showConstituencyResults, setShowConstituencyResults] = useState(false);
+    const [errors, setErrors] = useState<any>({});
 
-    const handleCountySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const countyId = parseInt(e.target.value);
-        setFormData({ ...formData, county_id: countyId, ward_id: 0 });
+    const validatePassword = (pass: string) => {
+        const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        return regex.test(pass);
     };
 
-    const handleWardSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setFormData({ ...formData, ward_id: parseInt(e.target.value) });
+    const handleInputChange = (field: string, value: string) => {
+        // Trim non-password fields
+        const trimmedValue = field.includes('password') ? value : value.trimStart();
+
+        setFormData((prev: any) => ({ ...prev, [field]: trimmedValue }));
+
+        // Clear error when user types
+        if (errors[field]) {
+            setErrors((prev: any) => ({ ...prev, [field]: null }));
+        }
+    };
+
+    useEffect(() => {
+        fetch('http://localhost:8000/location/counties')
+            .then(res => res.json())
+            .then(data => setCounties(data))
+            .catch(err => console.error("Failed to fetch counties", err));
+    }, []);
+
+    useEffect(() => {
+        if (formData.county_id) {
+            fetch(`http://localhost:8000/location/constituencies?county_id=${formData.county_id}`)
+                .then(res => res.json())
+                .then(data => setConstituencies(data))
+                .catch(err => console.error("Failed to fetch constituencies", err));
+        }
+    }, [formData.county_id]);
+
+    const filteredCounties = counties.filter(c =>
+        c.name.toLowerCase().includes(countySearch.toLowerCase())
+    );
+
+    const filteredConstituencies = constituencies.filter(c =>
+        c.name.toLowerCase().includes(constituencySearch.toLowerCase())
+    );
+
+    const handleSelectLocation = async (lat: number, lng: number) => {
+        setFormData((prev: any) => ({ ...prev, latitude: lat, longitude: lng }));
+        try {
+            const res = await fetch(`http://localhost:8000/location/reverse?lat=${lat}&lng=${lng}`);
+            const data = await res.json();
+            if (data.county) {
+                setFormData((prev: any) => ({ ...prev, county_id: data.county.id, latitude: lat, longitude: lng }));
+                setCountySearch(data.county.name);
+                setShowCountyResults(false);
+            }
+            if (data.constituency) {
+                setFormData((prev: any) => ({ ...prev, constituency_id: data.constituency.id }));
+                setConstituencySearch(data.constituency.name);
+                setShowConstituencyResults(false);
+            }
+        } catch (err) {
+            console.error("Reverse geocoding failed", err);
+        }
+    };
+
+    const isSignupValid = () => {
+        return (
+            formData.full_name.trim() &&
+            formData.email.trim() &&
+            validatePassword(formData.password) &&
+            formData.password === formData.password_confirm &&
+            formData.county_id > 0 &&
+            formData.constituency_id > 0 &&
+            Object.values(errors).every(e => !e)
+        );
     };
 
     const handleSubmit = async () => {
-        console.log('Submitting Registration:', formData);
-        // TODO: Call API endpoint /auth/signup
+        const endpoint = mode === 'signup' ? '/auth/signup' : '/auth/login';
+        let body: any = JSON.stringify(formData);
+        let headers: any = { 'Content-Type': 'application/json' };
+
+        if (mode === 'login') {
+            const params = new URLSearchParams();
+            params.append('username', formData.email || '');
+            params.append('password', formData.password || '');
+            body = params.toString();
+            headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+        }
+
         try {
-            const response = await fetch('http://localhost:8000/auth/signup', {
+            const response = await fetch(`http://localhost:8000${endpoint}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData),
+                headers: headers,
+                body: body,
             });
             const data = await response.json();
             if (response.ok) {
+                saveToken(data.access_token);
                 onComplete();
             } else {
-                alert(`Error: ${data.detail}`);
+                setErrors({ submit: data.detail || 'Authentication failed' });
             }
-        } catch (error) {
-            alert('Network Error');
+        } catch (err) {
+            setErrors({ submit: 'Authentication failed' });
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent, type: 'county' | 'constituency') => {
+        if (e.key === 'Enter') {
+            if (type === 'county') setShowCountyResults(false);
+            if (type === 'constituency') setShowConstituencyResults(false);
         }
     };
 
     return (
-        <div style={{ maxWidth: '400px', margin: '2rem auto', padding: '1rem', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h2>Welcome to ParliaScope</h2>
-            {step === 1 && (
-                <>
-                    <h3>Select Your Location</h3>
-                    <p>This helps us show relevant bills and representatives.</p>
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label>County:</label>
-                        <select
-                            value={formData.county_id}
-                            onChange={handleCountySelect}
-                            style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-                        >
-                            <option value="0">Select County</option>
-                            {MOCK_COUNTIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    </div>
+        <div className="onboarding-card" style={{ maxWidth: '540px', margin: '1rem auto', padding: '1.5rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ textAlign: 'center', marginBottom: '1rem', color: 'var(--primary)', fontWeight: 800 }}>
+                {mode === 'signup' ? 'Create Your Account' : 'Welcome Back'}
+            </h2>
 
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label>Ward:</label>
-                        <select
-                            value={formData.ward_id}
-                            onChange={handleWardSelect}
-                            disabled={!formData.county_id}
-                            style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-                        >
-                            <option value="0">Select Ward</option>
-                            {MOCK_WARDS[formData.county_id as keyof typeof MOCK_WARDS]?.map((w: any) => (
-                                <option key={w.id} value={w.id}>{w.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <Button label="Next" onPress={() => setStep(2)} disabled={!formData.county_id || !formData.ward_id} />
-                </>
-            )}
-
-            {step === 2 && (
-                <>
-                    <h3>Create Account</h3>
+            {mode === 'login' ? (
+                <div className="auth-step">
                     <div style={{ marginBottom: '1rem' }}>
                         <Input
+                            label="Email"
+                            required
                             value={formData.email || ''}
-                            onChangeText={(text) => setFormData({ ...formData, email: text })}
-                            placeholder="Email (Optional for Guest)"
+                            onChangeText={(text) => handleInputChange('email', text)}
+                            placeholder="e.g. citizen@parliascope.go.ke"
                         />
                     </div>
-                    <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ marginBottom: '1.25rem' }}>
                         <Input
+                            label="Password"
+                            required
                             value={formData.password || ''}
-                            onChangeText={(text) => setFormData({ ...formData, password: text })}
-                            placeholder="Password"
+                            onChangeText={(text) => handleInputChange('password', text)}
+                            placeholder="••••••••"
                             secureTextEntry
                         />
                     </div>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <Button label="Back" onPress={() => setStep(1)} variant="secondary" />
-                        <Button label="Complete Setup" onPress={handleSubmit} />
+                    {errors.submit && <p style={{ color: 'red', textAlign: 'center', marginBottom: '1rem' }}>{errors.submit}</p>}
+                    <Button label="Login" onPress={handleSubmit} />
+                    <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
+                        Don't have an account? <button onClick={() => setMode('signup')} style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Sign Up</button>
+                    </p>
+                </div>
+            ) : (
+                <div className="auth-step">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <Input
+                            label="Full Name"
+                            required
+                            value={formData.full_name}
+                            onChangeText={(text) => handleInputChange('full_name', text)}
+                            placeholder="First Last"
+                        />
+                        <Input
+                            label="ID / Passport"
+                            required
+                            value={formData.id_number}
+                            onChangeText={(text) => handleInputChange('id_number', text)}
+                            placeholder="12345678"
+                        />
                     </div>
-                </>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <Input
+                            label="Email Address"
+                            required
+                            value={formData.email}
+                            onChangeText={(text) => handleInputChange('email', text)}
+                            placeholder="citizen@example.com"
+                        />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <Input
+                            label="Password"
+                            required
+                            value={formData.password}
+                            onChangeText={(text) => handleInputChange('password', text)}
+                            placeholder="8+ chars, with symbols"
+                            secureTextEntry
+                            error={formData.password && !validatePassword(formData.password) ? 'Password too weak' : ''}
+                        />
+                        <Input
+                            label="Confirm"
+                            required
+                            value={formData.password_confirm}
+                            onChangeText={(text) => handleInputChange('password_confirm', text)}
+                            placeholder="Match password"
+                            secureTextEntry
+                            error={formData.password_confirm && formData.password !== formData.password_confirm ? "Passwords don't match" : ""}
+                        />
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginBottom: '1rem' }}>
+                        <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Location Information <span style={{ color: 'red' }}>*</span></h3>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '0.75rem' }}>
+                            <div style={{ flex: 1, position: 'relative' }}>
+                                <Input
+                                    label="County"
+                                    required
+                                    value={countySearch}
+                                    onChangeText={(text) => {
+                                        setCountySearch(text);
+                                        setShowCountyResults(true);
+                                        if (text === '') setFormData({ ...formData, county_id: 0, constituency_id: 0 });
+                                    }}
+                                    onKeyDown={(e: any) => handleKeyDown(e, 'county')}
+                                    onFocus={() => setShowCountyResults(true)}
+                                    onBlur={() => setTimeout(() => setShowCountyResults(false), 250)}
+                                    placeholder="Search County..."
+                                />
+                                {showCountyResults && countySearch && filteredCounties.length > 0 && (
+                                    <div className="dropdown" style={{ position: 'absolute', width: '100%', zIndex: 20, background: 'white', border: '1px solid var(--border)', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                                        {filteredCounties.map(c => (
+                                            <div key={c.id} onClick={() => { setFormData({ ...formData, county_id: c.id, constituency_id: 0 }); setCountySearch(c.name); setConstituencySearch(''); setShowCountyResults(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: formData.county_id === c.id ? 'var(--bg-surface)' : 'transparent' }}>{c.name}</div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ flex: 1, position: 'relative' }}>
+                                <Input
+                                    label="Constituency"
+                                    required
+                                    value={constituencySearch}
+                                    onChangeText={(text) => {
+                                        setConstituencySearch(text);
+                                        setShowConstituencyResults(true);
+                                    }}
+                                    onKeyDown={(e: any) => handleKeyDown(e, 'constituency')}
+                                    onFocus={() => setShowConstituencyResults(true)}
+                                    onBlur={() => setTimeout(() => setShowConstituencyResults(false), 250)}
+                                    placeholder="Search Constituency..."
+                                    disabled={!formData.county_id}
+                                />
+                                {showConstituencyResults && constituencySearch && formData.county_id > 0 && filteredConstituencies.length > 0 && (
+                                    <div className="dropdown" style={{ position: 'absolute', width: '100%', zIndex: 20, background: 'white', border: '1px solid var(--border)', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                                        {filteredConstituencies.map(c => (
+                                            <div key={c.id} onClick={() => { setFormData({ ...formData, constituency_id: c.id }); setConstituencySearch(c.name); setShowConstituencyResults(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: formData.constituency_id === c.id ? 'var(--bg-surface)' : 'transparent' }}>{c.name}</div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => setIsMapOpen(true)}
+                                type="button"
+                                style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer' }}
+                                title="Pick from Map"
+                            >
+                                📍
+                            </button>
+                        </div>
+                    </div>
+
+                    <Button label="Complete Sign Up" onPress={handleSubmit} disabled={!isSignupValid()} />
+
+                    <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
+                        Already have an account? <button onClick={() => setMode('login')} style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Log In</button>
+                    </p>
+
+                    <MapModal
+                        isOpen={isMapOpen}
+                        onClose={() => setIsMapOpen(false)}
+                        onSelectLocation={handleSelectLocation}
+                        initialLocation={formData.latitude ? { lat: formData.latitude, lng: formData.longitude } : undefined}
+                    />
+                </div>
             )}
-            <p style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-                <button
-                    onClick={onComplete}
-                    style={{ background: 'none', border: 'none', color: '#007AFF', cursor: 'pointer', fontSize: '0.95rem' }}
-                >
-                    Skip — continue as guest →
-                </button>
-            </p>
         </div>
     );
 };

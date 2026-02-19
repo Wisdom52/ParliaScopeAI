@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Platform, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -7,34 +7,60 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { ChatScreen } from './screens/ChatScreen';
-import { ListenScreen } from './screens/ListenScreen';
+import { DailyScreen } from './screens/DailyScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { ProfileScreen } from './screens/ProfileScreen';
+import { API_BASE_URL } from './config/api';
 
-type TabId = 'home' | 'search' | 'chat' | 'listen';
+type TabId = 'home' | 'docs' | 'chat' | 'daily' | 'profile';
 
-const TABS: { id: TabId; label: string; icon: keyof typeof MaterialCommunityIcons.hasIcon | string }[] = [
+const TABS: { id: TabId; label: string; icon: any }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'search', label: 'Search', icon: 'magnify' },
-    { id: 'chat', label: 'Chat', icon: 'chat' },
-    { id: 'listen', label: 'Listen', icon: 'headphones' },
+    { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
+    { id: 'chat', label: 'Chat', icon: 'chat-outline' },
+    { id: 'daily', label: 'Daily', icon: 'calendar-blank' },
+    { id: 'profile', label: 'Profile', icon: 'account' },
 ];
 
 export default function App() {
-    const [isOnboarded, setIsOnboarded] = useState(false);
+    const [user, setUser] = useState<any>(null);
     const [activeTab, setActiveTab] = useState<TabId>('home');
+    const [token, setToken] = useState<string | null>(null);
 
-    const handleOnboardingComplete = () => {
-        setIsOnboarded(true);
+    const checkAuth = async () => {
+        try {
+            const storedToken = await AsyncStorage.getItem('parliaScope_token');
+            setToken(storedToken);
+            if (storedToken) {
+                const response = await fetch(`${API_BASE_URL}/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${storedToken}` }
+                });
+                if (response.ok) {
+                    setUser(await response.json());
+                } else {
+                    await handleLogout();
+                }
+            }
+        } catch (e) {
+            console.error("Auth check failed", e);
+        }
     };
 
-    if (!isOnboarded) {
-        return (
-            <SafeAreaView style={styles.safeArea}>
-                <OnboardingScreen onComplete={handleOnboardingComplete} />
-                <StatusBar style="auto" />
-            </SafeAreaView>
-        );
-    }
+    useEffect(() => {
+        checkAuth();
+    }, []);
+
+    const handleOnboardingComplete = () => {
+        checkAuth();
+        setActiveTab('profile');
+    };
+
+    const handleLogout = async () => {
+        await AsyncStorage.removeItem('parliaScope_token');
+        setUser(null);
+        setToken(null);
+        setActiveTab('home');
+    };
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -43,12 +69,24 @@ export default function App() {
                 <Text style={styles.headerTitle}>ParliaScope</Text>
             </View>
 
-            {/* Tab Content */}
             <View style={styles.content}>
+                {/* Tab Content */}
                 {activeTab === 'home' && <HomeScreen onNavigate={(tab) => setActiveTab(tab as TabId)} />}
-                {activeTab === 'search' && <SearchScreen />}
+                {activeTab === 'docs' && <SearchScreen />}
                 {activeTab === 'chat' && <ChatScreen />}
-                {activeTab === 'listen' && <ListenScreen />}
+                {activeTab === 'daily' && <DailyScreen />}
+                {activeTab === 'profile' && (
+                    user ? (
+                        <ProfileScreen
+                            user={user}
+                            token={token}
+                            onUpdate={checkAuth}
+                            onLogout={handleLogout}
+                        />
+                    ) : (
+                        <OnboardingScreen onComplete={handleOnboardingComplete} />
+                    )
+                )}
             </View>
 
             {/* Bottom Tab Bar */}
@@ -72,7 +110,7 @@ export default function App() {
             </View>
 
             <StatusBar style="auto" />
-        </SafeAreaView>
+        </SafeAreaView >
     );
 }
 
@@ -97,6 +135,9 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#007AFF',
         letterSpacing: -0.5
+    },
+    profileIcon: {
+        padding: 5
     },
     content: { flex: 1 },
     tabBar: {

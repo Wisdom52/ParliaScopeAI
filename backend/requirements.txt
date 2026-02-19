@@ -17,3 +17,4 @@ ollama
 edge-tts
 aiofiles
 pydantic[email]
+httpx

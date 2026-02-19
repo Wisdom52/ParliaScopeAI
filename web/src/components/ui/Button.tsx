@@ -2,7 +2,7 @@ import React from 'react';
 import type { ButtonProps } from '@shared/ui/types';
 import { tokens } from '@shared/tokens';
 
-export const Button: React.FC<ButtonProps> = ({ label, onPress, variant = 'primary', disabled }) => {
+export const Button: React.FC<ButtonProps> = ({ label, onPress, variant = 'primary', disabled, loading }) => {
     const backgroundColor = disabled
         ? '#ccc'
         : variant === 'primary'
@@ -12,19 +12,20 @@ export const Button: React.FC<ButtonProps> = ({ label, onPress, variant = 'prima
     return (
         <button
             onClick={onPress}
-            disabled={disabled}
+            disabled={disabled || loading}
             style={{
                 backgroundColor,
                 color: tokens.colors.background,
                 padding: `${tokens.spacing.s}px ${tokens.spacing.m}px`,
                 borderRadius: tokens.borderRadius.m,
                 border: 'none',
-                cursor: disabled ? 'not-allowed' : 'pointer',
+                cursor: (disabled || loading) ? 'not-allowed' : 'pointer',
                 fontSize: tokens.typography.fontSize.m,
                 fontFamily: tokens.typography.fontFamily,
+                opacity: (disabled || loading) ? 0.7 : 1,
             }}
         >
-            {label}
+            {loading ? 'Processing...' : label}
         </button>
     );
 };

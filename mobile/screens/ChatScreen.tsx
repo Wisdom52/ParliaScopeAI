@@ -53,8 +53,6 @@ export const ChatScreen: React.FC = () => {
     return (
         <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.header}>
-                <Text style={styles.title}>Chat with Hansard</Text>
-                <MaterialCommunityIcons name="chat-outline" size={24} color="#007AFF" />
             </View>
 
             <FlatList
@@ -75,7 +73,7 @@ export const ChatScreen: React.FC = () => {
                         )}
                     </View>
                 )}
-                ListEmptyComponent={<Text style={styles.empty}>Ask a question about parliamentary proceedings...</Text>}
+                ListEmptyComponent={null}
             />
 
             {loading && <ActivityIndicator style={{ marginBottom: 8 }} />}
@@ -97,7 +95,7 @@ export const ChatScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', letterSpacing: -0.5 },
     messageList: { flex: 1, marginBottom: 16 },
     bubble: { padding: 14, borderRadius: 18, marginBottom: 12, maxWidth: '85%' },

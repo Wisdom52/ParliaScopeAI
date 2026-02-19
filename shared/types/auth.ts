@@ -2,7 +2,7 @@ export interface User {
     id: number;
     email?: string;
     county_id?: number;
-    ward_id?: number;
+    constituency_id?: number;
 }
 
 export interface AuthResponse {
@@ -16,8 +16,13 @@ export interface LoginRequest {
 }
 
 export interface SignupRequest {
-    email?: string;
-    password?: string;
+    email: string;
+    password: string;
+    password_confirm?: string;
+    full_name?: string;
+    id_number?: string | number;
     county_id: number;
-    ward_id: number;
+    constituency_id: number;
+    latitude?: number | null;
+    longitude?: number | null;
 }

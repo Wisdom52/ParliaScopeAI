@@ -6,18 +6,15 @@ interface Props {
 }
 
 const cards = [
-    { id: 'search', icon: 'magnify', title: 'Search Hansard', desc: 'Find speeches by topic or speaker.', bg: '#f1f8ff', color: '#007AFF' },
+    { id: 'docs', icon: 'file-document-outline', title: 'Documents Hub', desc: 'Find speeches by topic or speaker.', bg: '#f1f8ff', color: '#007AFF' },
     { id: 'chat', icon: 'chat-outline', title: 'Chat with AI', desc: 'Ask questions and get AI answers.', bg: '#f6ffed', color: '#52c41a' },
-    { id: 'listen', icon: 'headphones', title: 'Daily Brief', desc: 'Listen to highlights in EN/SW.', bg: '#fff7e6', color: '#faad14' },
-    { id: 'info', icon: 'file-document-outline', title: 'Hansard Pipeline', desc: 'Real-time ingestion stats.', bg: '#fff1f0', color: '#f5222d' },
+    { id: 'daily', icon: 'calendar-blank', title: 'Daily Brief', desc: 'Read or Listen to highlights.', bg: '#fff7e6', color: '#faad14' },
+    { id: 'info', icon: 'server-network', title: 'Hansard Pipeline', desc: 'Real-time ingestion stats.', bg: '#fff1f0', color: '#f5222d' },
 ];
 
 export const HomeScreen: React.FC<Props> = ({ onNavigate }) => {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            <Text style={styles.title}>Welcome to ParliaScope</Text>
-            <Text style={styles.subtitle}>Your AI-powered window into Kenya's Parliament</Text>
-
             <View style={styles.grid}>
                 {cards.map(card => (
                     <TouchableOpacity

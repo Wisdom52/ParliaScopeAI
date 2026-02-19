@@ -15,11 +15,20 @@ interface HistoryItem {
     query: string;
 }
 
+interface Hansard {
+    id: number;
+    title: string;
+    pdf_url: string;
+    created_at: string;
+}
+
 export const SearchScreen: React.FC = () => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [history, setHistory] = useState<HistoryItem[]>([]);
+    const [documents, setDocuments] = useState<Hansard[]>([]);
     const [loading, setLoading] = useState(false);
+    const [docsLoading, setDocsLoading] = useState(false);
 
     const fetchHistory = async () => {
         try {
@@ -30,8 +39,21 @@ export const SearchScreen: React.FC = () => {
         }
     };
 
+    const fetchDocs = async () => {
+        setDocsLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/docs/`);
+            if (res.ok) setDocuments(await res.json());
+        } catch (e) {
+            console.error("Docs fetch failed", e);
+        } finally {
+            setDocsLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchHistory();
+        fetchDocs();
     }, []);
 
     const handleSearch = async () => {
@@ -53,8 +75,6 @@ export const SearchScreen: React.FC = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Search Hansard</Text>
-                <MaterialCommunityIcons name="magnify" size={24} color="#007AFF" />
             </View>
 
             <View style={styles.searchRow}>
@@ -90,14 +110,35 @@ export const SearchScreen: React.FC = () => {
                 ListEmptyComponent={!loading && query ? <Text style={styles.empty}>No results found.</Text> : null}
             />
 
-            {history.length > 0 && (
+            {history.length > 0 && !results.length && (
                 <View style={styles.historySection}>
                     <Text style={styles.historyTitle}>Recent Searches</Text>
                     {history.slice(0, 5).map((h, i) => (
-                        <TouchableOpacity key={i} onPress={() => { setQuery(h.query); }}>
+                        <TouchableOpacity key={i} onPress={() => { setQuery(h.query); handleSearch(); }}>
                             <Text style={styles.historyItem}>{h.query}</Text>
                         </TouchableOpacity>
                     ))}
+                </View>
+            )}
+
+            {!results.length && (
+                <View style={styles.docsSection}>
+                    <Text style={styles.historyTitle}>Processed Documents</Text>
+                    {docsLoading ? (
+                        <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 10 }} />
+                    ) : documents.length > 0 ? (
+                        documents.map(doc => (
+                            <TouchableOpacity key={doc.id} style={styles.docListItem}>
+                                <MaterialCommunityIcons name="file-document-outline" size={24} color="#007AFF" />
+                                <View style={{ marginLeft: 12, flex: 1 }}>
+                                    <Text style={styles.speaker}>{doc.title}</Text>
+                                    <Text style={styles.date}>{new Date(doc.created_at).toLocaleDateString()}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))
+                    ) : (
+                        <Text style={styles.empty}>No documents processed yet.</Text>
+                    )}
                 </View>
             )}
         </View>
@@ -106,7 +147,7 @@ export const SearchScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', letterSpacing: -0.5 },
     searchRow: { flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 20 },
     inputContainer: {
@@ -143,4 +184,13 @@ const styles = StyleSheet.create({
     historySection: { marginTop: 24, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 16 },
     historyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12, color: '#1a1a1a' },
     historyItem: { color: '#007AFF', paddingVertical: 8, fontSize: 15, fontWeight: '500' },
+    docsSection: { marginTop: 24 },
+    docListItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 12,
+        marginBottom: 8
+    }
 });

@@ -74,7 +74,7 @@ def match_speaker(name: str, db: Session) -> Speaker:
     
     return None
 
-def process_hansard_pdf(pdf_file, db: Session) -> int:
+def process_hansard_pdf(pdf_file, db: Session, hansard_id: int = None) -> int:
     """
     Full pipeline: Parse PDF -> Extract Segments -> Map Speakers -> Save to DB.
     Returns number of segments processed.
@@ -91,6 +91,7 @@ def process_hansard_pdf(pdf_file, db: Session) -> int:
         speaker_obj = match_speaker(speaker_name, db)
         
         new_segment = SpeechSegment(
+            hansard_id=hansard_id,
             speaker_name=speaker_name,
             content=content,
             speaker_id=speaker_obj.id if speaker_obj else None,

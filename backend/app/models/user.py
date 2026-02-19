@@ -16,8 +16,12 @@ class User(Base):
     # Let's check the plan: "Implement /signup (lazy/full)".
     
     hashed_password = Column(String, nullable=True)
+    full_name = Column(String, nullable=True)
+    id_number = Column(String, nullable=True)
+    latitude = Column(String, nullable=True)
+    longitude = Column(String, nullable=True)
     county_id = Column(Integer, ForeignKey("counties.id"), nullable=True)
-    ward_id = Column(Integer, ForeignKey("wards.id"), nullable=True)
+    constituency_id = Column(Integer, ForeignKey("constituencies.id"), nullable=True)
 
     county = relationship("County")
-    ward = relationship("Ward")
+    constituency = relationship("Constituency")

@@ -171,5 +171,7 @@ web-build/
 *.key
 *.keystore
 
-# Local Files
-README.md
+# Project specific ignores
+backend/static/
+backend/error_log.txt
+*.log
