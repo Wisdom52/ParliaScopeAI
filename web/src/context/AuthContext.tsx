@@ -9,6 +9,8 @@ interface User {
     constituency_id: number | null;
     county_name?: string;
     constituency_name?: string;
+    whatsapp_number?: string | null;
+    push_token?: string | null;
 }
 
 interface AuthContextType {

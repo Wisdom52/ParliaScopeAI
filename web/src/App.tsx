@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Home, FileText, MessageSquare, Calendar, User } from 'lucide-react';
+import { Home, FileText, Calendar, User } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Onboarding } from './pages/Onboarding';
 import { ProfilePage } from './pages/ProfilePage';
 import { HomePage } from './pages/HomePage';
 import { SearchPage } from './pages/SearchPage';
-import { ChatInterface } from './pages/ChatInterface';
 import { DailyPage } from './pages/DailyPage';
 import './App.css';
 
@@ -14,7 +13,6 @@ type TabId = 'home' | 'docs' | 'chat' | 'daily' | 'profile';
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Home', icon: <Home size={18} /> },
   { id: 'docs', label: 'Docs', icon: <FileText size={18} /> },
-  { id: 'chat', label: 'Chat', icon: <MessageSquare size={18} /> },
   { id: 'daily', label: 'Daily', icon: <Calendar size={18} /> },
   { id: 'profile', label: 'Profile', icon: <User size={18} /> },
 ];
@@ -46,7 +44,7 @@ function AppContent() {
           {TABS.map(tab => (
             <button
               key={tab.id}
-              className={`tab-button ${activeTab === tab.id ? 'tab-active' : ''}`}
+              className={`tab - button ${activeTab === tab.id ? 'tab-active' : ''} `}
               onClick={() => handleTabClick(tab.id)}
             >
               <span className="tab-icon">{tab.icon}</span>
@@ -60,7 +58,6 @@ function AppContent() {
       <main className="tab-content">
         {activeTab === 'home' && <HomePage onNavigate={(tab) => handleTabClick(tab as TabId)} />}
         {activeTab === 'docs' && <SearchPage />}
-        {activeTab === 'chat' && <ChatInterface />}
         {activeTab === 'daily' && <DailyPage />}
         {activeTab === 'profile' && (
           user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => setActiveTab('profile')} />

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, MapPin, CreditCard, Edit2, X, LogOut } from 'lucide-react';
+import { User, Mail, MapPin, CreditCard, Edit2, X, LogOut, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { AlertSettings } from '../components/AlertSettings';
 
 interface ProfilePageProps {
     onLogout?: () => void;
@@ -15,7 +16,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
         full_name: '',
         id_number: '',
         county_id: 0,
-        constituency_id: 0
+        constituency_id: 0,
+        whatsapp_number: '',
+        push_token: ''
     });
     const [counties, setCounties] = useState<any[]>([]);
     const [constituencies, setConstituencies] = useState<any[]>([]);
@@ -28,7 +31,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                 full_name: user.full_name || '',
                 id_number: user.id_number || '',
                 county_id: user.county_id || 0,
-                constituency_id: user.constituency_id || 0
+                constituency_id: user.constituency_id || 0,
+                whatsapp_number: user.whatsapp_number || '',
+                push_token: user.push_token || ''
             });
         }
     }, [user]);
@@ -129,13 +134,28 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                             </p>
                         </div>
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>ID / Passport Number</label>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>ID / Passport </label>
                             {isEditing ? (
                                 <Input value={formData.id_number} onChangeText={(text) => setFormData({ ...formData, id_number: text })} />
                             ) : (
                                 <p style={{ fontWeight: 600 }}>
                                     <CreditCard size={14} color="#666" style={{ marginRight: '8px' }} />
                                     {user.id_number || 'Not provided'}
+                                </p>
+                            )}
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>WhatsApp Number for Alerts</label>
+                            {isEditing ? (
+                                <Input
+                                    value={formData.whatsapp_number}
+                                    onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
+                                    placeholder="+254700000000"
+                                />
+                            ) : (
+                                <p style={{ fontWeight: 600 }}>
+                                    <MessageCircle size={14} color="#666" style={{ marginRight: '8px' }} />
+                                    {user.whatsapp_number || 'Not provided'}
                                 </p>
                             )}
                         </div>
@@ -181,6 +201,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                         </div>
                     </div>
                 </div>
+
+                {/* Alert Settings Module */}
+                <AlertSettings />
+
             </div>
 
             <div style={{ marginTop: '3rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>

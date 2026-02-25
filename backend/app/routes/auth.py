@@ -70,8 +70,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me", response_model=UserSchema)
-def get_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     from jose import jwt
     from app.core.security import SECRET_KEY, ALGORITHM
     try:
@@ -85,6 +84,10 @@ def get_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.get("/me", response_model=UserSchema)
+def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     
     # Add location names to the response
     if user.county_id:
@@ -102,20 +105,9 @@ def get_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
 @router.patch("/profile", response_model=UserSchema)
 def update_profile(
     user_update: UserUpdate, 
-    token: str = Depends(oauth2_scheme), 
+    user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    from jose import jwt
-    from app.core.security import SECRET_KEY, ALGORITHM
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-        
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
     
     update_data = user_update.dict(exclude_unset=True)
     for key, value in update_data.items():

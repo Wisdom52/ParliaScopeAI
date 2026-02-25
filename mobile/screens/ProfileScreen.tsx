@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Input } from '../components/ui/Input';
+import { AlertSettings } from '../components/AlertSettings';
 
 interface ProfileScreenProps {
     user: any;
@@ -20,7 +21,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
         full_name: user?.full_name || '',
         id_number: user?.id_number || '',
         county_id: user?.county_id || 0,
-        constituency_id: user?.constituency_id || 0
+        constituency_id: user?.constituency_id || 0,
+        whatsapp_number: user?.whatsapp_number || '',
+        push_token: user?.push_token || ''
     });
     const [counties, setCounties] = useState<any[]>([]);
     const [constituencies, setConstituencies] = useState<any[]>([]);
@@ -116,6 +119,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                             <Text style={styles.value}>{user?.id_number || 'Not provided'}</Text>
                         )}
                     </View>
+
+                    <View style={styles.field}>
+                        <Text style={styles.label}>WhatsApp Number (Alerts)</Text>
+                        {isEditing ? (
+                            <Input
+                                value={formData.whatsapp_number}
+                                onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
+                                placeholder="+254700000000"
+                            />
+                        ) : (
+                            <Text style={styles.value}>{user?.whatsapp_number || 'Not provided'}</Text>
+                        )}
+                    </View>
                 </View>
 
                 <Text style={styles.sectionTitle}>Location Details</Text>
@@ -159,6 +175,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                         )}
                     </View>
                 </View>
+
+                {/* Alert Settings Component */}
+                <AlertSettings token={token} />
             </View>
 
             {isEditing && (

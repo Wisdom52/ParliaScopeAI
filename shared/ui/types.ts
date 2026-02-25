@@ -1,7 +1,7 @@
 export interface ButtonProps {
     label: string;
     onPress: () => void;
-    variant?: 'primary' | 'secondary';
+    variant?: 'primary' | 'secondary' | 'outline';
     disabled?: boolean;
     loading?: boolean;
 }

@@ -174,4 +174,8 @@ web-build/
 # Project specific ignores
 backend/static/
 backend/error_log.txt
+backend/alembic_error.txt
+backend/scripts/check_ingestion.py
+backend/scripts/final_check.py
+backend/scripts/test_ai_summary.py
 *.log

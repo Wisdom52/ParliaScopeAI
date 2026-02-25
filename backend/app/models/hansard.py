@@ -11,6 +11,7 @@ class Hansard(Base):
     date = Column(Date, nullable=True)
     pdf_url = Column(String, nullable=True)
     source_id = Column(String, unique=True, index=True, nullable=True) # e.g., a slug of the URL or internal ID
+    ai_summary = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     # Relationships

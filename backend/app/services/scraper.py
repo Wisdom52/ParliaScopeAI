@@ -52,8 +52,16 @@ def get_latest_hansard_links(limit: int = 5) -> List[Dict[str, str]]:
                 if len(links) >= limit:
                     break
         
+        # Add the specific requested Hansard manually if not already found
+        specific_url = "https://www.parliament.go.ke/sites/default/files/2026-02/The%20Hansard%20-%20Tuesday%2C%2010%20February%202026_6.pdf"
+        if not any(l['url'] == specific_url for l in links):
+            links.insert(0, {
+                "title": "The Hansard - Tuesday, 10 February 2026",
+                "url": specific_url
+            })
+
         logger.info(f"Found {len(links)} Hansard links")
-        return links
+        return links[:limit] if limit > 0 else links
         
     except Exception as e:
         logger.error(f"Scraping Hansard failed: {str(e)}")

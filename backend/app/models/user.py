@@ -22,6 +22,11 @@ class User(Base):
     longitude = Column(String, nullable=True)
     county_id = Column(Integer, ForeignKey("counties.id"), nullable=True)
     constituency_id = Column(Integer, ForeignKey("constituencies.id"), nullable=True)
+    
+    # Notification preferences
+    whatsapp_number = Column(String, nullable=True)
+    push_token = Column(String, nullable=True)
 
     county = relationship("County")
     constituency = relationship("Constituency")
+    subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")

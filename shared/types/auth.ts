@@ -3,6 +3,8 @@ export interface User {
     email?: string;
     county_id?: number;
     constituency_id?: number;
+    whatsapp_number?: string;
+    push_token?: string;
 }
 
 export interface AuthResponse {
@@ -25,4 +27,7 @@ export interface SignupRequest {
     constituency_id: number;
     latitude?: number | null;
     longitude?: number | null;
+    whatsapp_number?: string | null;
+    push_token?: string | null;
 }
+

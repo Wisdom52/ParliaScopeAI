@@ -6,18 +6,16 @@ import Constants from 'expo-constants';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { SearchScreen } from './screens/SearchScreen';
-import { ChatScreen } from './screens/ChatScreen';
 import { DailyScreen } from './screens/DailyScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { API_BASE_URL } from './config/api';
 
-type TabId = 'home' | 'docs' | 'chat' | 'daily' | 'profile';
+type TabId = 'home' | 'docs' | 'daily' | 'profile';
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
-    { id: 'chat', label: 'Chat', icon: 'chat-outline' },
     { id: 'daily', label: 'Daily', icon: 'calendar-blank' },
     { id: 'profile', label: 'Profile', icon: 'account' },
 ];
@@ -73,7 +71,6 @@ export default function App() {
                 {/* Tab Content */}
                 {activeTab === 'home' && <HomeScreen onNavigate={(tab) => setActiveTab(tab as TabId)} />}
                 {activeTab === 'docs' && <SearchScreen />}
-                {activeTab === 'chat' && <ChatScreen />}
                 {activeTab === 'daily' && <DailyScreen />}
                 {activeTab === 'profile' && (
                     user ? (

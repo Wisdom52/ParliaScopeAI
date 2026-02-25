@@ -25,11 +25,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from app.database import Base
-from app.models.location import County, Constituency, Ward
+from app.models.location import County, Constituency
 from app.models.speech import SpeechSegment
+from app.models.hansard import Hansard
 from app.models.user import User
 from app.models.speaker import Speaker
 from app.models.search_history import SearchHistory
+from app.models.subscription import Subscription
+from app.models.bill import Bill, BillImpact
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
