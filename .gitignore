@@ -178,4 +178,6 @@ backend/alembic_error.txt
 backend/scripts/check_ingestion.py
 backend/scripts/final_check.py
 backend/scripts/test_ai_summary.py
+backend/scripts/check_bills.py
+backend/scripts/test_impact.py
 *.log

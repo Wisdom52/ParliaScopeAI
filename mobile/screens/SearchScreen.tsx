@@ -151,10 +151,6 @@ export const SearchScreen = () => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Document Hub</Text>
-            </View>
-
             <View style={styles.searchBox}>
                 <MaterialCommunityIcons name="magnify" size={20} color="#666" style={{ marginRight: 8 }} />
                 <TextInput

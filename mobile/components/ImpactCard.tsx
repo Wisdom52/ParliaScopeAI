@@ -37,18 +37,20 @@ export const ImpactCard: React.FC<ImpactCardProps> = ({ impact }) => {
 
     return (
         <View style={[styles.cardContainer, { borderLeftColor: sentimentColor }]}>
-            <View style={styles.iconContainer}>
-                <Feather name={iconConfig.name} size={24} color={iconConfig.color} />
+            <View style={styles.header}>
+                <View style={styles.iconTitleContainer}>
+                    <View style={[styles.iconContainer, { backgroundColor: `${iconConfig.color}15` }]}>
+                        <Feather name={iconConfig.name} size={20} color={iconConfig.color} />
+                    </View>
+                    <Text style={styles.archetypeTitle}>{impact.archetype}</Text>
+                </View>
+                <View style={[styles.sentimentTag, { backgroundColor: `${sentimentColor}15` }]}>
+                    <Text style={[styles.sentimentText, { color: sentimentColor }]}>
+                        {impact.sentiment.toUpperCase()}
+                    </Text>
+                </View>
             </View>
             <View style={styles.contentContainer}>
-                <View style={styles.header}>
-                    <Text style={styles.archetypeTitle}>{impact.archetype} Impact</Text>
-                    <View style={[styles.sentimentTag, { backgroundColor: `${sentimentColor}20` }]}>
-                        <Text style={[styles.sentimentText, { color: sentimentColor }]}>
-                            {impact.sentiment.toUpperCase()}
-                        </Text>
-                    </View>
-                </View>
                 <Text style={styles.description}>{impact.description}</Text>
             </View>
         </View>
@@ -59,52 +61,56 @@ const styles = StyleSheet.create({
     cardContainer: {
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
-        borderColor: '#EFEFF4',
-        borderLeftWidth: 4,
-        borderRadius: 12,
+        borderColor: '#E2E8F0',
+        borderLeftWidth: 5,
+        borderRadius: 16,
         padding: 16,
-        marginBottom: 12,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
+        marginBottom: 16,
+        flexDirection: 'column',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    iconContainer: {
-        backgroundColor: '#F2F2F7',
-        padding: 10,
-        borderRadius: 24,
-        marginRight: 16,
-    },
-    contentContainer: {
-        flex: 1,
+        shadowRadius: 10,
+        elevation: 3,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 12,
+    },
+    iconTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    iconContainer: {
+        padding: 8,
+        borderRadius: 10,
     },
     archetypeTitle: {
         fontSize: 16,
-        fontWeight: '700',
-        color: '#1C1C1E',
+        fontWeight: '800',
+        color: '#1A202C',
         textTransform: 'capitalize',
     },
     sentimentTag: {
-        paddingHorizontal: 8,
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 12,
+        borderRadius: 20,
     },
     sentimentText: {
         fontSize: 10,
-        fontWeight: '700',
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    contentContainer: {
+        marginTop: 4,
     },
     description: {
         fontSize: 14,
-        color: '#3A3A3C',
-        lineHeight: 20,
+        color: '#4A5568',
+        lineHeight: 22,
+        fontWeight: '400',
     },
 });
