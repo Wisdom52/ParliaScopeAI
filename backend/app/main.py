@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
 
-from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills
+from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives
 from app.routes.ingest import perform_hansard_crawl
 from app.database import SessionLocal
 from fastapi.staticfiles import StaticFiles
@@ -43,6 +43,7 @@ app.include_router(location.router)
 app.include_router(docs.router)
 app.include_router(subscriptions.router)
 app.include_router(bills.router)
+app.include_router(representatives.router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

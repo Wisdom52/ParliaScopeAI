@@ -123,3 +123,43 @@ class BillOut(BillBase):
 
     class Config:
         from_attributes = True
+
+# --- Representatives & Reviews ---
+class ReviewBase(BaseModel):
+    rating: int
+    comment: Optional[str] = None
+
+class ReviewCreate(ReviewBase):
+    pass
+
+class ReviewOut(ReviewBase):
+    id: int
+    user_id: int
+    speaker_id: int
+    created_at: datetime
+    user_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class SpeakerBase(BaseModel):
+    name: str
+    role: str
+    party: Optional[str] = None
+    constituency_id: Optional[int] = None
+    county_id: Optional[int] = None
+    bio: Optional[str] = None
+    education: Optional[str] = None
+    experience: Optional[str] = None
+    image_url: Optional[str] = None
+    sittings_attended: int = 0
+    votes_cast: int = 0
+    bills_sponsored: int = 0
+
+class SpeakerOut(SpeakerBase):
+    id: int
+    reviews: List[ReviewOut] = []
+    average_rating: float = 0.0
+
+    class Config:
+        from_attributes = True

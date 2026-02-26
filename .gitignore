@@ -181,3 +181,4 @@ backend/scripts/test_ai_summary.py
 backend/scripts/check_bills.py
 backend/scripts/test_impact.py
 *.log
+backend/*.html

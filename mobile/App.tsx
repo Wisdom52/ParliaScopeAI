@@ -7,22 +7,23 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { DailyScreen } from './screens/DailyScreen';
+import { RepresentativeScreen } from './screens/RepresentativeScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { API_BASE_URL } from './config/api';
 
-type TabId = 'home' | 'docs' | 'daily' | 'profile';
+type TabId = 'daily' | 'docs' | 'representative' | 'profile';
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
-    { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
     { id: 'daily', label: 'Daily', icon: 'calendar-blank' },
-    { id: 'profile', label: 'Profile', icon: 'account' },
+    { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
+    { id: 'representative', label: 'Representative', icon: 'account-group-outline' },
+    { id: 'profile', label: 'Profile', icon: 'account-outline' },
 ];
 
 export default function App() {
     const [user, setUser] = useState<any>(null);
-    const [activeTab, setActiveTab] = useState<TabId>('home');
+    const [activeTab, setActiveTab] = useState<TabId>('daily');
     const [token, setToken] = useState<string | null>(null);
 
     const checkAuth = async () => {
@@ -57,7 +58,7 @@ export default function App() {
         await AsyncStorage.removeItem('parliaScope_token');
         setUser(null);
         setToken(null);
-        setActiveTab('home');
+        setActiveTab('daily');
     };
 
     return (
@@ -69,9 +70,9 @@ export default function App() {
 
             <View style={styles.content}>
                 {/* Tab Content */}
-                {activeTab === 'home' && <HomeScreen onNavigate={(tab) => setActiveTab(tab as TabId)} />}
-                {activeTab === 'docs' && <SearchScreen />}
                 {activeTab === 'daily' && <DailyScreen />}
+                {activeTab === 'docs' && <SearchScreen />}
+                {activeTab === 'representative' && <RepresentativeScreen />}
                 {activeTab === 'profile' && (
                     user ? (
                         <ProfileScreen
