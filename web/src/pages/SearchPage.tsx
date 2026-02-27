@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
-import { ImpactCard } from '../components/ImpactCard';
 import { Loader2, FileText, Activity, Send, MessageSquare, Search, X } from 'lucide-react';
 
 interface Hansard {
@@ -39,7 +38,6 @@ export const SearchPage: React.FC = () => {
     // Bills State
     const [bills, setBills] = useState<Bill[]>([]);
     const [billsLoading, setBillsLoading] = useState(false);
-    const [analyzingId, setAnalyzingId] = useState<number | null>(null);
 
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -60,12 +58,9 @@ export const SearchPage: React.FC = () => {
     };
 
     const fetchBills = async () => {
-        if (!token) return;
         setBillsLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/bills/', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await fetch('http://localhost:8000/bills/');
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -77,22 +72,6 @@ export const SearchPage: React.FC = () => {
         }
     };
 
-    const handleAnalyze = async (billId: number, rawText: string) => {
-        if (!token) return;
-        setAnalyzingId(billId);
-        try {
-            const response = await fetch(`http://localhost:8000/bills/${billId}/analyze?raw_text=${encodeURIComponent(rawText)}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (response.ok) {
-                setTimeout(fetchBills, 5000);
-            }
-        } catch (error) {
-            console.error("Failed to start analysis:", error);
-            setAnalyzingId(null);
-        }
-    };
 
     const syncHansards = async () => {
         setIsSyncing(true);
@@ -110,8 +89,14 @@ export const SearchPage: React.FC = () => {
 
     useEffect(() => {
         fetchDocs();
-        if (token) fetchBills();
-    }, [token]);
+        fetchBills();
+    }, []);
+
+    useEffect(() => {
+        if (activeCategory === 'bills') {
+            fetchBills();
+        }
+    }, [activeCategory]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -276,41 +261,38 @@ export const SearchPage: React.FC = () => {
                     </div>
                 ) : (
                     <div className="bills-section">
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <h3 style={{ fontSize: '1.25rem', color: 'var(--primary)', margin: '0 0 0.5rem 0' }}>AI Bill Impact Engine</h3>
-                            <p style={{ color: '#666', fontSize: '0.95rem' }}>Demographic-specific analysis for critical legislation.</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h3 style={{ fontSize: '1.25rem', color: 'var(--primary)', margin: 0 }}>Legislative Bills</h3>
                         </div>
                         {billsLoading ? (
                             <div style={{ textAlign: 'center', padding: '3rem' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></div>
                         ) : filteredBills.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '3rem', background: '#f8f9fa', borderRadius: 'var(--radius)' }}>
+                            <div style={{ padding: '4rem', textAlign: 'center', background: '#f8f9fa', borderRadius: 'var(--radius)', color: '#666' }}>
+                                <Search size={40} style={{ opacity: 0.2, marginBottom: '1rem' }} />
                                 <p>No bills found matching "{searchQuery}"</p>
                             </div>
                         ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                            <div className="docs-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
                                 {filteredBills.map(bill => (
-                                    <div key={bill.id} className="card" style={{ padding: '1.5rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'white' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                                            <h4 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--primary)', margin: 0 }}>{bill.title}</h4>
-                                            <Button label="Discuss Bill" variant="outline" onPress={() => { setSelectedHansard({ id: bill.id, title: bill.title, ai_summary: bill.summary, created_at: '', pdf_url: '' }); setChatMessages([]); }} />
+                                    <div
+                                        key={bill.id}
+                                        className="doc-card"
+                                        onClick={() => { setSelectedHansard({ id: bill.id, title: bill.title, ai_summary: bill.summary, created_at: '', pdf_url: bill.document_url }); setChatMessages([]); }}
+                                        style={{ padding: '1.25rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'white', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                            <div style={{ padding: '0.5rem', background: '#FFF7ED', borderRadius: '10px' }}><Activity size={20} color="#F97316" /></div>
+                                            <span style={{ fontSize: '0.75rem', color: '#888', background: '#f0fdf4', padding: '0.2rem 0.6rem', borderRadius: '1rem', fontWeight: '600' }}>Bill</span>
                                         </div>
-                                        <p style={{ color: '#444', fontSize: '1rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>{bill.summary}</p>
-
-                                        {bill.impacts && bill.impacts.length > 0 ? (
-                                            <div style={{ background: '#F8FAFC', padding: '1.25rem', borderRadius: '12px' }}>
-                                                <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '1rem', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Impact Segmentation</div>
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-                                                    {bill.impacts.map(impact => (
-                                                        <ImpactCard key={impact.id} impact={impact} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div style={{ background: '#f1f5f9', padding: '2rem', borderRadius: '12px', textAlign: 'center' }}>
-                                                <p style={{ color: '#64748b', marginBottom: '1rem' }}>AI segmentation hasn't been run for this bill.</p>
-                                                <Button label="Initialize AI Impact Analysis" onPress={() => handleAnalyze(bill.id, bill.summary)} loading={analyzingId === bill.id} />
-                                            </div>
-                                        )}
+                                        <div style={{ fontWeight: '700', fontSize: '1rem', marginBottom: '0.5rem', color: '#1a1a1a', lineHeight: '1.4' }}>{bill.title}</div>
+                                        <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                            {bill.summary || "Summary pending..."}
+                                        </div>
+                                        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#F97316', fontSize: '0.8rem', fontWeight: '600' }}>
+                                            <MessageSquare size={14} /> Discuss bill
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -337,9 +319,40 @@ export const SearchPage: React.FC = () => {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--primary)', fontWeight: '700', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                         <FileText size={18} /> Official Summary
                                     </div>
-                                    <div style={{ fontSize: '1.1rem', lineHeight: '1.7', color: '#334155', whiteSpace: 'pre-wrap' }}>
-                                        {selectedHansard.ai_summary || "System is still generating the summary for this document. Please check back in a few moments."}
-                                    </div>
+                                    {/* Structured Summary Renderer */}
+                                    {selectedHansard.ai_summary ? (() => {
+                                        const lines = selectedHansard.ai_summary.split('\n');
+                                        return (
+                                            <div style={{ fontSize: '0.95rem', lineHeight: '1.75', color: '#334155' }}>
+                                                {lines.map((line, i) => {
+                                                    if (line.startsWith('## ')) {
+                                                        return (
+                                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: i === 0 ? 0 : '1.5rem', marginBottom: '0.6rem', fontSize: '1rem', fontWeight: '800', color: '#1e293b', borderBottom: '2px solid var(--primary)', paddingBottom: '0.3rem' }}>
+                                                                {line.replace('## ', '')}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    if (line.startsWith('---')) return null;
+                                                    if (line.trim() === '') return <div key={i} style={{ height: '0.4rem' }} />;
+                                                    // Render inline bold (**text**)
+                                                    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                                                    return (
+                                                        <div key={i} style={{ marginBottom: '0.25rem' }}>
+                                                            {parts.map((part, j) =>
+                                                                part.startsWith('**') && part.endsWith('**')
+                                                                    ? <strong key={j}>{part.slice(2, -2)}</strong>
+                                                                    : <span key={j}>{part}</span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })() : (
+                                        <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>
+                                            System is still generating the summary for this document. Please check back in a few moments.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Right Pane: Chat */}

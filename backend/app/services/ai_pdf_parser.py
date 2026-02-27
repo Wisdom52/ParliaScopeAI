@@ -32,10 +32,44 @@ DO NOT include any explanation, preamble, or markdown formatting (like ```json).
 """
 
 SUMMARY_PROMPT = """
-You are an expert political analyst. Your task is to provide a concise, high-level summary of a Kenyan Parliamentary Hansard transcript.
-The summary should be approximately 3-5 sentences long and cover the main topics discussed and any significant decisions or motions mentioned.
+You are an expert Kenyan parliamentary analyst. Analyze the following Hansard transcript and produce a DETAILED, structured report using EXACTLY the section headers below. Be specific, factual, and cite MPs by name when possible.
 
-Output ONLY the text of the summary. Do not include any titles, headers, or preamble.
+---
+
+## 🏛️ EXECUTIVE SUMMARY
+Write 2-3 sentences capturing the essence of the sitting — what was the central issue and what was the overall mood of the House?
+
+## 📋 THE MAIN MOTION
+Describe exactly what was being debated or decided. Include the motion title if stated, who moved it, and who seconded it.
+
+## ⚖️ ARGUMENTS: SUPPORTERS vs. CRITICS
+**Supporters said:**
+- List 3-5 key arguments made in favor of the motion/bill.
+
+**Critics were concerned about:**
+- List 3-5 key objections or reservations raised against the motion/bill.
+
+## 🗳️ VOTING RECORDS & OUTCOMES
+Was a vote taken? State clearly: Did the motion PASS, FAIL, or was it DEFERRED? If a division was called, summarize the Ayes vs Nays count. If no vote was taken, explain what happened instead.
+
+## 🔥 SPIRITED EXCHANGES
+Highlight 2-3 notable moments — heated debates, points of order, or interventions that shaped the mood of the sitting. Mention the MPs involved by name.
+
+## 🧑‍💼 MEMBER CONTRIBUTIONS
+List key contributions from individual MPs. For each, write one sentence on what position they took or what they said. Format as:
+- **Hon. [Name] ([Constituency]):** Brief summary of their contribution.
+
+## 👥 STAKEHOLDER IMPACT
+Who wins and who might be burdened by this debate's outcome?
+- **Benefits:** (groups or citizens who stand to gain)
+- **Concerns:** (groups who may face challenges or costs)
+
+## 📅 NEXT STEPS
+What happens next in the legislative calendar? Is the bill going for a second reading, committee stage, or awaiting presidential assent?
+
+---
+
+Output ONLY the structured report above. Do not add any preamble, conclusion, or commentary outside the sections.
 """
 
 def extract_raw_text(pdf_path: str) -> str:
@@ -89,9 +123,9 @@ async def get_ai_segments(text_chunk: str) -> List[Dict]:
     return []
 
 async def generate_hansard_summary(text: str) -> str:
-    """Generates a high-level summary of the Hansard text using Ollama."""
-    # Use the first 7,000 chars for summary
-    summary_text = text[:7000]
+    """Generates a detailed structured summary of the Hansard text using Ollama."""
+    # Use up to 20,000 chars to give the AI enough context for a detailed summary
+    summary_text = text[:20000]
     
     async with httpx.AsyncClient() as client:
         try:

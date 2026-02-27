@@ -72,7 +72,7 @@ export default function App() {
                 {/* Tab Content */}
                 {activeTab === 'daily' && <DailyScreen />}
                 {activeTab === 'docs' && <SearchScreen />}
-                {activeTab === 'representative' && <RepresentativeScreen />}
+                {activeTab === 'representative' && <RepresentativeScreen onSwitchToProfile={() => setActiveTab('profile')} />}
                 {activeTab === 'profile' && (
                     user ? (
                         <ProfileScreen

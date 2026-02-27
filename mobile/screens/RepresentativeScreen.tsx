@@ -38,7 +38,7 @@ interface Representative {
     reviews: Review[];
 }
 
-export const RepresentativeScreen: React.FC = () => {
+export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> = ({ onSwitchToProfile }) => {
     const [reps, setReps] = useState<Representative[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -86,7 +86,13 @@ export const RepresentativeScreen: React.FC = () => {
     };
 
     const handleReviewSubmit = async () => {
-        if (!selectedRep || !token) return;
+        if (!selectedRep) return;
+
+        if (!token) {
+            setSelectedRep(null); // Close modal before switching
+            if (onSwitchToProfile) onSwitchToProfile();
+            return;
+        }
         setSubmittingReview(true);
         try {
             const res = await fetch(`${API_BASE_URL}/representatives/${selectedRep.id}/reviews`, {
@@ -127,7 +133,7 @@ export const RepresentativeScreen: React.FC = () => {
             <Image source={{ uri: item.image_url }} style={styles.cardImage} />
             <View style={styles.cardContent}>
                 <Text style={styles.cardName}>{item.name}</Text>
-                <Text style={styles.cardSub}>{item.constituency_name || "National"}</Text>
+                <Text style={styles.cardSub}>{item.constituency_name || item.county_name || "National"}</Text>
                 <View style={styles.tagRow}>
                     <View style={styles.partyTag}>
                         <Text style={styles.partyText}>{item.party}</Text>
@@ -191,7 +197,7 @@ export const RepresentativeScreen: React.FC = () => {
                                 <Image source={{ uri: selectedRep.image_url }} style={styles.profileImage} />
                                 <Text style={styles.profileName}>{selectedRep.name}</Text>
                                 <View style={styles.profileMeta}>
-                                    <Text style={styles.profileSub}>{selectedRep.party} • {selectedRep.constituency_name}</Text>
+                                    <Text style={styles.profileSub}>{selectedRep.party} • {selectedRep.constituency_name || selectedRep.county_name || "National"}</Text>
                                 </View>
                             </View>
 
@@ -235,38 +241,32 @@ export const RepresentativeScreen: React.FC = () => {
                                     <Text style={styles.reviewCount}>({selectedRep.reviews.length})</Text>
                                 </View>
 
-                                {token ? (
-                                    <View style={styles.reviewForm}>
-                                        <Text style={styles.formLabel}>Rate this representative</Text>
-                                        <View style={styles.starRow}>
-                                            {[1, 2, 3, 4, 5].map(s => (
-                                                <TouchableOpacity key={s} onPress={() => setReviewRating(s)}>
-                                                    <MaterialCommunityIcons
-                                                        name={s <= reviewRating ? "star" : "star-outline"}
-                                                        size={32}
-                                                        color="#eab308"
-                                                    />
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                        <TextInput
-                                            placeholder="Write your review..."
-                                            value={reviewComment}
-                                            onChangeText={setReviewComment}
-                                            style={styles.commentInput}
-                                            multiline
-                                        />
-                                        <Button
-                                            label={submittingReview ? 'Submitting...' : 'Submit Review'}
-                                            onPress={handleReviewSubmit}
-                                            disabled={submittingReview}
-                                        />
+                                <View style={styles.reviewForm}>
+                                    <Text style={styles.formLabel}>Rate this representative</Text>
+                                    <View style={styles.starRow}>
+                                        {[1, 2, 3, 4, 5].map(s => (
+                                            <TouchableOpacity key={s} onPress={() => setReviewRating(s)}>
+                                                <MaterialCommunityIcons
+                                                    name={s <= reviewRating ? "star" : "star-outline"}
+                                                    size={32}
+                                                    color="#eab308"
+                                                />
+                                            </TouchableOpacity>
+                                        ))}
                                     </View>
-                                ) : (
-                                    <View style={styles.loginCard}>
-                                        <Text style={styles.loginNote}>Sign in to review your representative.</Text>
-                                    </View>
-                                )}
+                                    <TextInput
+                                        placeholder="Write your review..."
+                                        value={reviewComment}
+                                        onChangeText={setReviewComment}
+                                        style={styles.commentInput}
+                                        multiline
+                                    />
+                                    <Button
+                                        label={submittingReview ? 'Submitting...' : 'Submit Review'}
+                                        onPress={handleReviewSubmit}
+                                        disabled={submittingReview}
+                                    />
+                                </View>
 
                                 {selectedRep.reviews.map(review => (
                                     <View key={review.id} style={styles.reviewItem}>

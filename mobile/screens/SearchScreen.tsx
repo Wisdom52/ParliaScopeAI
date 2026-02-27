@@ -62,13 +62,10 @@ export const SearchScreen = () => {
         }
     };
 
-    const fetchBills = async (currentToken: string | null) => {
-        if (!currentToken) return;
+    const fetchBills = async () => {
         setBillsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/bills/`, {
-                headers: { 'Authorization': `Bearer ${currentToken}` }
-            });
+            const response = await fetch(`${API_BASE_URL}/bills/`);
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -133,10 +130,10 @@ export const SearchScreen = () => {
 
     useEffect(() => {
         fetchDocs();
+        fetchBills();
         const loadInitialData = async () => {
             const storedToken = await AsyncStorage.getItem('parliaScope_token');
             setToken(storedToken);
-            if (storedToken) fetchBills(storedToken);
         };
         loadInitialData();
     }, []);
@@ -247,7 +244,33 @@ export const SearchScreen = () => {
                                 <MaterialCommunityIcons name="text-box-search" size={16} color="#007AFF" />
                                 <Text style={styles.sectionBadgeText}>Official Summary</Text>
                             </View>
-                            <Text style={styles.summaryText}>{selectedDoc?.ai_summary || "System is still generating the summary. Check back soon."}</Text>
+                            {selectedDoc?.ai_summary ? (
+                                selectedDoc.ai_summary.split('\n').map((line, i) => {
+                                    if (line.startsWith('## ')) {
+                                        return (
+                                            <Text key={i} style={{ fontSize: 14, fontWeight: '800', color: '#1e293b', marginTop: i === 0 ? 0 : 16, marginBottom: 4, borderBottomWidth: 2, borderBottomColor: '#007AFF', paddingBottom: 4 }}>
+                                                {line.replace('## ', '')}
+                                            </Text>
+                                        );
+                                    }
+                                    if (line.startsWith('---') || line.trim() === '') return <View key={i} style={{ height: 4 }} />;
+                                    // Render inline bold
+                                    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                                    return (
+                                        <Text key={i} style={styles.summaryText}>
+                                            {parts.map((part, j) =>
+                                                part.startsWith('**') && part.endsWith('**')
+                                                    ? <Text key={j} style={{ fontWeight: '700' }}>{part.slice(2, -2)}</Text>
+                                                    : part
+                                            )}
+                                        </Text>
+                                    );
+                                })
+                            ) : (
+                                <Text style={[styles.summaryText, { color: '#94a3b8', fontStyle: 'italic' }]}>
+                                    System is still generating the summary. Check back soon.
+                                </Text>
+                            )}
                         </View>
 
                         <View style={styles.chatSection}>

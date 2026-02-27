@@ -64,14 +64,8 @@ def seed_representatives():
             # Check if exists
             existing = db.query(Speaker).filter(Speaker.name == rep['name']).first()
             
-            const_id = None
-            county_id = None
-            
-            area_lower = rep['area'].lower().strip()
-            if rep['role'] == "MP":
-                const_id = constituencies.get(area_lower)
-            else:
-                county_id = counties.get(area_lower)
+            const_name = rep.get('constituency', '') or ''
+            county_name = rep.get('county', '') or ''
             
             # Semi-realistic stats for attendance (since we don't scrape that yet)
             sittings = random.randint(10, 50)
@@ -80,8 +74,8 @@ def seed_representatives():
             if existing:
                 existing.role = rep['role']
                 existing.party = rep['party']
-                existing.constituency_id = const_id
-                existing.county_id = county_id
+                existing.constituency_name = const_name if const_name else existing.constituency_name
+                existing.county_name = county_name if county_name else existing.county_name
                 existing.bio = rep.get('bio', existing.bio)
                 existing.education = rep.get('education', existing.education)
                 existing.experience = rep.get('experience', existing.experience)
@@ -93,8 +87,8 @@ def seed_representatives():
                     name=rep['name'],
                     role=rep['role'],
                     party=rep['party'],
-                    constituency_id=const_id,
-                    county_id=county_id,
+                    constituency_name=const_name,
+                    county_name=county_name,
                     bio=rep.get('bio', ""),
                     education=rep.get('education', ""),
                     experience=rep.get('experience', ""),

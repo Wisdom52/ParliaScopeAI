@@ -160,6 +160,8 @@ class SpeakerOut(SpeakerBase):
     id: int
     reviews: List[ReviewOut] = []
     average_rating: float = 0.0
+    constituency_name: Optional[str] = None
+    county_name: Optional[str] = None
 
     class Config:
         from_attributes = True

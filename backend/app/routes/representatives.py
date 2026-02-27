@@ -45,7 +45,7 @@ def get_representative(id: int, db: Session = Depends(get_db)):
     ).scalar()
     rep.average_rating = float(avg) if avg else 0.0
     
-    # Add user names to reviews manually since schema expectations differ from relationship
+    # Add user names to reviews
     for review in rep.reviews:
         user = db.query(User).filter(User.id == review.user_id).first()
         review.user_name = user.full_name if user else "Anonymous Citizen"

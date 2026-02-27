@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
+
 class Speaker(Base):
     __tablename__ = "speakers"
 
@@ -15,6 +16,8 @@ class Speaker(Base):
     education = Column(String, nullable=True)
     experience = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
+    constituency_name = Column(String, nullable=True)  # Direct text storage — no join needed
+    county_name = Column(String, nullable=True)
     
     # Performance Stats
     sittings_attended = Column(Integer, default=0)

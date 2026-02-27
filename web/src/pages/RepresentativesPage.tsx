@@ -31,7 +31,7 @@ interface Representative {
     reviews: Review[];
 }
 
-export const RepresentativesPage: React.FC = () => {
+export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> = ({ onSwitchToProfile }) => {
     const { token } = useAuth();
     const [reps, setReps] = useState<Representative[]>([]);
     const [loading, setLoading] = useState(true);
@@ -71,7 +71,12 @@ export const RepresentativesPage: React.FC = () => {
     };
 
     const handleReviewSubmit = async () => {
-        if (!selectedRep || !token) return;
+        if (!selectedRep) return;
+
+        if (!token) {
+            if (onSwitchToProfile) onSwitchToProfile();
+            return;
+        }
         setSubmittingReview(true);
         try {
             const res = await fetch(`http://localhost:8000/representatives/${selectedRep.id}/reviews`, {
@@ -161,7 +166,7 @@ export const RepresentativesPage: React.FC = () => {
                                     <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{rep.name}</h3>
                                     <div style={{ display: 'flex', alignItems: 'center', color: '#666', fontSize: '0.85rem' }}>
                                         <MapPin size={14} style={{ marginRight: '4px' }} />
-                                        {rep.constituency_name || "National"}
+                                        {rep.constituency_name || rep.county_name || "National"}
                                     </div>
                                 </div>
                             </div>
@@ -209,7 +214,7 @@ export const RepresentativesPage: React.FC = () => {
                                     <h2 style={{ fontSize: '2rem', margin: '0 0 0.5rem 0' }}>{selectedRep.name}</h2>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', color: '#4b5563' }}><Building size={18} style={{ marginRight: '6px' }} /> {selectedRep.party}</div>
-                                        <div style={{ display: 'flex', alignItems: 'center', color: '#4b5563' }}><MapPin size={18} style={{ marginRight: '6px' }} /> {selectedRep.constituency_name}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', color: '#4b5563' }}><MapPin size={18} style={{ marginRight: '6px' }} /> {selectedRep.constituency_name || selectedRep.county_name || "National"}</div>
                                         <div style={{ display: 'flex', alignItems: 'center', color: '#eab308', fontWeight: 600 }}><Star size={18} style={{ marginRight: '6px', fill: '#eab308' }} /> {selectedRep.average_rating.toFixed(1)} / 5.0</div>
                                     </div>
                                 </div>
@@ -254,38 +259,32 @@ export const RepresentativesPage: React.FC = () => {
                             <div style={{ paddingTop: '2rem', borderTop: '1px solid #eee' }}>
                                 <h3 style={{ marginBottom: '1.5rem' }}>Citizen Reviews ({selectedRep.reviews.length})</h3>
 
-                                {token ? (
-                                    <div style={{ background: '#f3f4f6', padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
-                                        <h4 style={{ margin: '0 0 1rem 0' }}>Submit your review</h4>
-                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
-                                            {[1, 2, 3, 4, 5].map(star => (
-                                                <Star
-                                                    key={star}
-                                                    size={24}
-                                                    style={{ cursor: 'pointer', fill: star <= reviewRating ? '#eab308' : 'none', color: '#eab308' }}
-                                                    onClick={() => setReviewRating(star)}
-                                                />
-                                            ))}
-                                        </div>
-                                        <textarea
-                                            placeholder="Write your thoughts on this representative..."
-                                            value={reviewComment}
-                                            onChange={(e) => setReviewComment(e.target.value)}
-                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', minHeight: '100px', marginBottom: '1rem' }}
-                                        />
-                                        <Button 
-                                            label={submittingReview ? 'Submitting...' : 'Submit Review'}
-                                            onPress={handleReviewSubmit}
-                                            disabled={submittingReview}
-                                            variant="primary"
-                                            loading={submittingReview}
-                                        />
+                                <div style={{ background: '#f3f4f6', padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
+                                    <h4 style={{ margin: '0 0 1rem 0' }}>Submit your review</h4>
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
+                                        {[1, 2, 3, 4, 5].map(star => (
+                                            <Star
+                                                key={star}
+                                                size={24}
+                                                style={{ cursor: 'pointer', fill: star <= reviewRating ? '#eab308' : 'none', color: '#eab308' }}
+                                                onClick={() => setReviewRating(star)}
+                                            />
+                                        ))}
                                     </div>
-                                ) : (
-                                    <div style={{ padding: '1.5rem', background: '#fff7ed', color: '#c2410c', borderRadius: '12px', marginBottom: '2rem', border: '1px solid #ffedd5' }}>
-                                        Please log in to submit a review for this representative.
-                                    </div>
-                                )}
+                                    <textarea
+                                        placeholder="Write your thoughts on this representative..."
+                                        value={reviewComment}
+                                        onChange={(e) => setReviewComment(e.target.value)}
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', minHeight: '100px', marginBottom: '1rem' }}
+                                    />
+                                    <Button
+                                        label={submittingReview ? 'Submitting...' : 'Submit Review'}
+                                        onPress={handleReviewSubmit}
+                                        disabled={submittingReview}
+                                        variant="primary"
+                                        loading={submittingReview}
+                                    />
+                                </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     {selectedRep.reviews.length === 0 ? (

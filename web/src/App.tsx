@@ -58,7 +58,7 @@ function AppContent() {
       <main className="tab-content">
         {activeTab === 'daily' && <DailyPage />}
         {activeTab === 'docs' && <SearchPage />}
-        {activeTab === 'representative' && <RepresentativesPage />}
+        {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'profile' && (
           user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => setActiveTab('profile')} />
         )}
