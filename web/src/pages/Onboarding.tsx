@@ -3,7 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
 import { MapModal } from '../components/MapModal';
-
+import { Eye, EyeOff, MapPin } from 'lucide-react';
 
 
 interface Props {
@@ -32,6 +32,9 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
     const [showCountyResults, setShowCountyResults] = useState(false);
     const [showConstituencyResults, setShowConstituencyResults] = useState(false);
     const [errors, setErrors] = useState<any>({});
+
+    const [showPassword, setShowPassword] = useState(false);
+    const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
     const validatePassword = (pass: string) => {
         const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -95,18 +98,31 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
     };
 
     const isSignupValid = () => {
-        return (
-            formData.full_name.trim() &&
-            formData.email.trim() &&
-            validatePassword(formData.password) &&
-            formData.password === formData.password_confirm &&
-            formData.county_id > 0 &&
-            formData.constituency_id > 0 &&
-            Object.values(errors).every(e => !e)
-        );
+        // Form is always "valid" enough to enable the button, validation happens on submit now
+        return true;
+    };
+
+    const validateFormOnSubmit = () => {
+        if (!formData.full_name?.trim()) return "Full name is required.";
+        if (!formData.email?.trim()) return "Email is required.";
+        if (!formData.id_number?.trim()) return "ID/Passport is required.";
+        if (!validatePassword(formData.password || '')) return "Password must be at least 8 characters and contain uppercase, lowercase, numbers, and symbols.";
+        if (formData.password !== formData.password_confirm) return "Passwords do not match.";
+        if (formData.county_id <= 0) return "Please select a County.";
+        if (formData.constituency_id <= 0) return "Please select a Constituency.";
+        if (Object.values(errors).some(e => e)) return "Please fix the errors in the form.";
+        return null;
     };
 
     const handleSubmit = async () => {
+        if (mode === 'signup') {
+            const validationError = validateFormOnSubmit();
+            if (validationError) {
+                setErrors({ submit: validationError });
+                return;
+            }
+        }
+
         const endpoint = mode === 'signup' ? '/auth/signup' : '/auth/login';
         let body: any = JSON.stringify(formData);
         let headers: any = { 'Content-Type': 'application/json' };
@@ -161,15 +177,22 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                             placeholder="e.g. citizen@parliascope.go.ke"
                         />
                     </div>
-                    <div style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ marginBottom: '1.25rem', position: 'relative' }}>
                         <Input
                             label="Password"
                             required
                             value={formData.password || ''}
                             onChangeText={(text) => handleInputChange('password', text)}
                             placeholder="••••••••"
-                            secureTextEntry
+                            secureTextEntry={!showPassword}
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            style={{ position: 'absolute', right: '8px', top: '36px', background: 'none', border: 'none', cursor: 'pointer', color: '#666' }}
+                        >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
                     </div>
                     {errors.submit && <p style={{ color: 'red', textAlign: 'center', marginBottom: '1rem' }}>{errors.submit}</p>}
                     <Button label="Login" onPress={handleSubmit} />
@@ -207,24 +230,42 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                        <Input
-                            label="Password"
-                            required
-                            value={formData.password}
-                            onChangeText={(text) => handleInputChange('password', text)}
-                            placeholder="8+ chars, with symbols"
-                            secureTextEntry
-                            error={formData.password && !validatePassword(formData.password) ? 'Password too weak' : ''}
-                        />
-                        <Input
-                            label="Confirm"
-                            required
-                            value={formData.password_confirm}
-                            onChangeText={(text) => handleInputChange('password_confirm', text)}
-                            placeholder="Match password"
-                            secureTextEntry
-                            error={formData.password_confirm && formData.password !== formData.password_confirm ? "Passwords don't match" : ""}
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <Input
+                                label="Password"
+                                required
+                                value={formData.password}
+                                onChangeText={(text) => handleInputChange('password', text)}
+                                placeholder="8+ chars, with symbols"
+                                secureTextEntry={!showPassword}
+                                error={formData.password && !validatePassword(formData.password) ? 'Password too weak' : ''}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{ position: 'absolute', right: '8px', top: '36px', background: 'none', border: 'none', cursor: 'pointer', color: '#666' }}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                        <div style={{ position: 'relative' }}>
+                            <Input
+                                label="Confirm"
+                                required
+                                value={formData.password_confirm}
+                                onChangeText={(text) => handleInputChange('password_confirm', text)}
+                                placeholder="Match password"
+                                secureTextEntry={!showPasswordConfirm}
+                                error={formData.password_confirm && formData.password !== formData.password_confirm ? "Passwords don't match" : ""}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                                style={{ position: 'absolute', right: '8px', top: '36px', background: 'none', border: 'none', cursor: 'pointer', color: '#666' }}
+                            >
+                                {showPasswordConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
                     </div>
 
                     <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginBottom: '1rem' }}>
@@ -276,14 +317,17 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                                     </div>
                                 )}
                             </div>
-                            <button
-                                onClick={() => setIsMapOpen(true)}
-                                type="button"
-                                style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer' }}
-                                title="Pick from Map"
-                            >
-                                📍
-                            </button>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '4px', opacity: 0 }}>Map</label>
+                                <button
+                                    onClick={() => setIsMapOpen(true)}
+                                    type="button"
+                                    style={{ flex: 1, background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}
+                                    title="Pick location from Map"
+                                >
+                                    <MapPin size={20} />
+                                </button>
+                            </div>
                         </div>
                     </div>
 

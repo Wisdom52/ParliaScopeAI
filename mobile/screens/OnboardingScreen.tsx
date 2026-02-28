@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -227,59 +228,66 @@ export const OnboardingScreen: React.FC<Props> = ({ onComplete }) => {
 
                     <View style={{ borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 15, marginBottom: 15 }}>
                         <Text style={styles.label}>Location Information</Text>
-                        <View style={{ position: 'relative', marginBottom: 10 }}>
-                            <Input
-                                label="County"
-                                required
-                                value={countySearch}
-                                onChangeText={(text) => {
-                                    setCountySearch(text);
-                                    setShowCountyResults(true);
-                                    if (text === '') setFormData((prev: any) => ({ ...prev, county_id: 0, constituency_id: 0 }));
-                                }}
-                                onFocus={() => setShowCountyResults(true)}
-                                onBlur={() => setTimeout(() => setShowCountyResults(false), 200)}
-                                placeholder="Search County..."
-                            />
-                            {showCountyResults && countySearch !== '' && (
-                                <View style={styles.dropdown}>
-                                    {filteredCounties.slice(0, 5).map(c => (
-                                        <TouchableOpacity key={c.id} onPress={() => { setFormData((prev: any) => ({ ...prev, county_id: c.id, constituency_id: 0 })); setCountySearch(c.name); setConstituencySearch(''); setShowCountyResults(false); }} style={styles.dropdownItem}>
-                                            <Text>{c.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                            <View style={{ flex: 1, position: 'relative', marginBottom: 10 }}>
+                                <Input
+                                    label="County"
+                                    required
+                                    value={countySearch}
+                                    onChangeText={(text) => {
+                                        setCountySearch(text);
+                                        setShowCountyResults(true);
+                                        if (text === '') setFormData((prev: any) => ({ ...prev, county_id: 0, constituency_id: 0 }));
+                                    }}
+                                    onFocus={() => setShowCountyResults(true)}
+                                    onBlur={() => setTimeout(() => setShowCountyResults(false), 200)}
+                                    placeholder="Search County..."
+                                />
+                                {showCountyResults && countySearch !== '' && (
+                                    <View style={styles.dropdown}>
+                                        {filteredCounties.slice(0, 5).map(c => (
+                                            <TouchableOpacity key={c.id} onPress={() => { setFormData((prev: any) => ({ ...prev, county_id: c.id, constituency_id: 0 })); setCountySearch(c.name); setConstituencySearch(''); setShowCountyResults(false); }} style={styles.dropdownItem}>
+                                                <Text>{c.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
 
-                        <View style={{ position: 'relative', marginBottom: 10 }}>
-                            <Input
-                                label="Constituency"
-                                required
-                                value={constituencySearch}
-                                onChangeText={(text) => {
-                                    setConstituencySearch(text);
-                                    setShowConstituencyResults(true);
-                                }}
-                                onFocus={() => setShowConstituencyResults(true)}
-                                onBlur={() => setTimeout(() => setShowConstituencyResults(false), 200)}
-                                placeholder="Search Constituency..."
-                                disabled={!formData.county_id}
-                            />
-                            {showConstituencyResults && constituencySearch !== '' && (
-                                <View style={styles.dropdown}>
-                                    {filteredConstituencies.slice(0, 5).map(c => (
-                                        <TouchableOpacity key={c.id} onPress={() => { setFormData((prev: any) => ({ ...prev, constituency_id: c.id })); setConstituencySearch(c.name); setShowConstituencyResults(false); }} style={styles.dropdownItem}>
-                                            <Text>{c.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
+                            <View style={{ flex: 1, position: 'relative', marginBottom: 10 }}>
+                                <Input
+                                    label="Constituency"
+                                    required
+                                    value={constituencySearch}
+                                    onChangeText={(text) => {
+                                        setConstituencySearch(text);
+                                        setShowConstituencyResults(true);
+                                    }}
+                                    onFocus={() => setShowConstituencyResults(true)}
+                                    onBlur={() => setTimeout(() => setShowConstituencyResults(false), 200)}
+                                    placeholder="Search Constituency..."
+                                    disabled={!formData.county_id}
+                                />
+                                {showConstituencyResults && constituencySearch !== '' && (
+                                    <View style={styles.dropdown}>
+                                        {filteredConstituencies.slice(0, 5).map(c => (
+                                            <TouchableOpacity key={c.id} onPress={() => { setFormData((prev: any) => ({ ...prev, constituency_id: c.id })); setConstituencySearch(c.name); setShowConstituencyResults(false); }} style={styles.dropdownItem}>
+                                                <Text>{c.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
 
-                        <TouchableOpacity onPress={() => setIsMapOpen(true)} style={{ alignSelf: 'center', marginVertical: 10 }}>
-                            <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>📍 Use Map for Auto-fill</Text>
-                        </TouchableOpacity>
+                            <View style={{ marginBottom: 10, marginTop: 18 }}>
+                                <TouchableOpacity
+                                    onPress={() => setIsMapOpen(true)}
+                                    style={{ backgroundColor: '#007AFF', borderRadius: 8, paddingHorizontal: 15, height: 44, justifyContent: 'center', alignItems: 'center' }}
+                                >
+                                    <Ionicons name="location-outline" size={24} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                     </View>
 
                     <Button label="Complete Sign Up" onPress={handleSubmit} disabled={!isSignupValid()} />

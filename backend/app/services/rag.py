@@ -58,13 +58,13 @@ def generate_answer(query: str, db: Session):
     # We'll try 'llama3' first, user said "ollama is already installed", hopefully they have a model.
     # We can default to 'llama3:latest'
     try:
-        response = ollama.chat(model='llama3', messages=[
+        response = ollama.chat(model='llama3.2:3b', messages=[
             {'role': 'user', 'content': prompt},
         ])
         answer = response['message']['content']
     except Exception as e:
         # Fallback handling or specific error message
-        answer = f"Error communicating with Ollama: {str(e)}. Please ensure 'llama3' model is pulled (ollama pull llama3)."
+        answer = f"Error communicating with Ollama: {str(e)}. Please ensure 'llama3.2:3b' model is pulled (ollama pull llama3.2:3b)."
 
     return {
         "answer": answer,
