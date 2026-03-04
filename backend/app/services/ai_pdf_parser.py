@@ -107,12 +107,25 @@ async def get_ai_segments(text_chunk: str) -> List[Dict]:
                     return []
                 raw_response = result.get('response', '').strip()
                 logger.debug(f"Ollama raw response: {raw_response[:200]}...")
-                # Remove markdown code blocks if present
-                if raw_response.startswith("```"):
-                    raw_response = raw_response.strip("```").strip("json").strip()
+                # Remove markdown or extract just the array
                 try:
-                    return json.loads(raw_response)
+                    start_idx = raw_response.find('[')
+                    end_idx = raw_response.rfind(']')
+                    if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+                        json_str = raw_response[start_idx:end_idx+1]
+                        parsed_json = json.loads(json_str)
+                    else:
+                        parsed_json = json.loads(raw_response)
+                        
+                    if isinstance(parsed_json, dict):
+                        for k, v in parsed_json.items():
+                            if isinstance(v, list):
+                                return v
+                        print(f"Dict without list: {str(parsed_json)[:200]}")
+                        return []
+                    return parsed_json if isinstance(parsed_json, list) else []
                 except json.JSONDecodeError as je:
+                    print(f"JSON Decode Error: {je}. Raw: {raw_response[:500]}")
                     logger.error(f"JSON Decode Error: {je}. Raw: {raw_response}")
                     return []
             else:
@@ -124,8 +137,8 @@ async def get_ai_segments(text_chunk: str) -> List[Dict]:
 
 async def generate_hansard_summary(text: str) -> str:
     """Generates a detailed structured summary of the Hansard text using Ollama."""
-    # Use up to 20,000 chars to give the AI enough context for a detailed summary
-    summary_text = text[:20000]
+    # Use up to 3,000 chars to speed up local inference for now
+    summary_text = text[:3000]
     
     async with httpx.AsyncClient() as client:
         try:
