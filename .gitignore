@@ -172,6 +172,7 @@ web-build/
 *.keystore
 
 # Project specific ignores
+Docs/
 backend/static/
 backend/error_log.txt
 backend/alembic_error.txt
