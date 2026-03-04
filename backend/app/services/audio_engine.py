@@ -91,7 +91,7 @@ async def get_document_brief(db: Session, item_id: int, item_type: str, lang: st
         SWAHILI TRANSLATION:"""
         try:
             response = ollama.chat(
-                model='llama3', 
+                model='llama3.2:3b', 
                 messages=[{'role': 'user', 'content': prompt}]
             )
             transcript = response['message']['content']
