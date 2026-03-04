@@ -1,28 +1,45 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.services.audio_engine import generate_script, synthesize_audio
+# Imports for engine functions are done inside endpoint logic to avoid cycles
 from app.services.embedding import get_embedding # Not used directly here but ensures models loaded
 import os
 
 router = APIRouter(prefix="/audio", tags=["Audio"])
 
-@router.get("/daily-brief")
-async def get_daily_brief(lang: str = "en", db: Session = Depends(get_db)):
+@router.get("/daily-brief/list")
+async def get_daily_brief_list(db: Session = Depends(get_db)):
     """
-    Generates (if not exists) and returns the URL for today's audio brief.
+    Returns the list of documents for the most recent session date.
     """
     try:
-        # 1. Generate Script
-        script = await generate_script(db, lang)
-        
-        # 2. Synthesize Audio
-        audio_url = await synthesize_audio(script, lang)
-        
+        from app.services.audio_engine import get_latest_brief_items
+        items, latest_date = await get_latest_brief_items(db)
         return {
-            "title": f"Daily Brief ({lang.upper()})",
-            "audio_url": f"http://localhost:8000{audio_url}", # Absolute URL for local dev
-            "transcript": script
+            "date": latest_date,
+            "items": items
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/daily-brief")
+async def get_daily_brief(
+    item_id: int, 
+    item_type: str, 
+    lang: str = "en", 
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the transcript and audio URL for a specific document.
+    """
+    try:
+        from app.services.audio_engine import get_document_brief
+        data = await get_document_brief(db, item_id, item_type, lang)
+        
+        # Ensure absolute URL for frontend
+        if data.get("audio_url"):
+            data["audio_url"] = f"http://localhost:8000{data['audio_url']}"
+            
+        return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

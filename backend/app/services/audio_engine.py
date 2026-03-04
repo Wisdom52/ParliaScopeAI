@@ -17,47 +17,106 @@ VOICE_MAP = {
     "sw": "sw-KE-RafikiNeural"   # Check availability, fallback to sw-TZ-DaudiNeural if needed
 }
 
-async def generate_script(db: Session, lang: str = "en") -> str:
+async def get_latest_brief_items(db: Session):
     """
-    Generates a generic 'Radio-Style' summary script using Ollama (Llama 3).
-    For MVP, grabs recent segments.
+    Returns a list of Hansards and Bills from the most recent session date.
     """
-    segments = db.query(SpeechSegment).limit(20).all()
+    # Find the most recent date with activity
+    from sqlalchemy import desc, func
+    from app.models.bill import Bill
+    from app.models.hansard import Hansard
 
-    if not segments:
-        return "No recent parliamentary proceedings found/Hakuna kumbukumbu za hivi karibuni za bunge."
+    latest_hansard = db.query(Hansard.date).filter(Hansard.date != None).order_by(desc(Hansard.date)).first()
+    latest_bill = db.query(func.date(Bill.created_at)).order_by(desc(Bill.created_at)).first()
 
-    transcript_text = "\n".join([f"{s.speaker_name}: {s.content}" for s in segments])
+    latest_date = None
+    if latest_hansard and latest_bill:
+        latest_date = max(latest_hansard[0], latest_bill[0])
+    elif latest_hansard:
+        latest_date = latest_hansard[0]
+    elif latest_bill:
+        latest_date = latest_bill[0]
 
-    prompt = f"""You are a radio news anchor for 'ParliaScope FM'. 
-    Summarize the following parliamentary proceedings into a strictly 1-minute energetic news brief.
-    Focus on key debates and decisions.
+    if not latest_date:
+        return [], None
+
+    hansards = db.query(Hansard).filter(Hansard.date == latest_date).all()
+    bills = db.query(Bill).filter(func.date(Bill.created_at) == latest_date).all()
+
+    items = []
+    for h in hansards:
+        items.append({
+            "id": h.id,
+            "type": "hansard",
+            "title": h.title,
+            "has_summary": bool(h.ai_summary)
+        })
     
-    Language: {lang} (If 'sw', write in Swahili. If 'en', write in English).
-    
-    Transcript:
-    {transcript_text[:3000]} (truncated)
-    
-    Script:"""
+    for b in bills:
+        items.append({
+            "id": b.id,
+            "type": "bill",
+            "title": b.title,
+            "has_summary": bool(b.summary)
+        })
 
-    try:
-        response = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
-        return response['message']['content']
-    except Exception as e:
-        return f"Error creating summary: {str(e)}"
+    return items, latest_date
 
-async def synthesize_audio(text: str, lang: str = "en") -> str:
+async def get_document_brief(db: Session, item_id: int, item_type: str, lang: str = "en") -> dict:
     """
-    Synthesizes text to speech and saves to a file. Returns the relative web path.
+    Fetches the specific summary for a document, translates if needed, and generates the audio URL.
     """
-    voice = VOICE_MAP.get(lang, "en-US-AriaNeural") # Fallback to generic US if KE not found
+    from app.models.bill import Bill
+    from app.models.hansard import Hansard
+
+    if item_type == "hansard":
+        item = db.query(Hansard).filter(Hansard.id == item_id).first()
+        raw_summary = item.ai_summary if item else None
+        title = item.title if item else "Unknown Hansard"
+    else:
+        item = db.query(Bill).filter(Bill.id == item_id).first()
+        raw_summary = item.summary if item else None
+        title = item.title if item else "Unknown Bill"
+
+    if not raw_summary:
+        return {"transcript": "Summary not available for this document.", "audio_url": None}
+
+    # Translation if Swahili requested
+    transcript = raw_summary
+    if lang == "sw":
+        prompt = f"""Translate the following parliamentary summary into clear, formal, and engaging Swahili.
+        Summary of {title}:
+        {raw_summary[:5000]}
+        
+        SWAHILI TRANSLATION:"""
+        try:
+            response = ollama.chat(
+                model='llama3', 
+                messages=[{'role': 'user', 'content': prompt}]
+            )
+            transcript = response['message']['content']
+        except Exception as e:
+            transcript = f"Error translating to Swahili: {str(e)}\n\nOriginal English:\n{raw_summary}"
+
+    # Generate Audio
+    audio_path = await synthesize_audio(transcript, lang, f"{item_type}_{item_id}")
     
-    # Simple filename strategy: date + lang
-    filename = f"daily_brief_{date.today()}_{lang}.mp3"
+    return {
+        "transcript": transcript,
+        "audio_url": audio_path,
+        "title": title
+    }
+
+async def synthesize_audio(text: str, lang: str = "en", identifier: str = "daily") -> str:
+    """
+    Synthesizes text to speech. Identifier ensures unique files per document.
+    """
+    voice = VOICE_MAP.get(lang, "en-US-AriaNeural")
+    filename = f"brief_{identifier}_{lang}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
 
-    # Note: edge-tts is async
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(filepath)
+    if not os.path.exists(filepath):
+        communicate = edge_tts.Communicate(text, voice)
+        await communicate.save(filepath)
     
     return f"/static/audio/{filename}"

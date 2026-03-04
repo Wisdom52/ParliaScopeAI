@@ -173,6 +173,8 @@ web-build/
 
 # Project specific ignores
 Docs/
+docs/
+DOCS/
 backend/static/
 backend/error_log.txt
 backend/alembic_error.txt
