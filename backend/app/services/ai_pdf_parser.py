@@ -34,43 +34,119 @@ DO NOT include any explanation, preamble, or markdown formatting (like ```json).
 SUMMARY_PROMPT = """
 You are an expert Kenyan parliamentary analyst. Analyze the following Hansard transcript and produce a DETAILED, structured report using EXACTLY the section headers below. Be specific, factual, and cite MPs by name when possible.
 
+IMPORTANT FORMATTING RULES:
+- Do NOT use any markdown symbols such as #, ##, *, **, _, or backticks.
+- Do NOT include any emojis or special symbols.
+- Use plain text only. Section headers should appear in ALL CAPS on their own line.
+- Sub-labels like "Supporters said:" or "Benefits:" should appear as plain labels followed by a colon, not bolded.
+
 ---
 
-## 🏛️ EXECUTIVE SUMMARY
+EXECUTIVE SUMMARY
 Write 2-3 sentences capturing the essence of the sitting — what was the central issue and what was the overall mood of the House?
 
-## 📋 THE MAIN MOTION
+THE MAIN MOTION
 Describe exactly what was being debated or decided. Include the motion title if stated, who moved it, and who seconded it.
 
-## ⚖️ ARGUMENTS: SUPPORTERS vs. CRITICS
-**Supporters said:**
+ARGUMENTS: SUPPORTERS vs. CRITICS
+Supporters said:
 - List 3-5 key arguments made in favor of the motion/bill.
 
-**Critics were concerned about:**
+Critics were concerned about:
 - List 3-5 key objections or reservations raised against the motion/bill.
 
-## 🗳️ VOTING RECORDS & OUTCOMES
+VOTING RECORDS AND OUTCOMES
 Was a vote taken? State clearly: Did the motion PASS, FAIL, or was it DEFERRED? If a division was called, summarize the Ayes vs Nays count. If no vote was taken, explain what happened instead.
 
-## 🔥 SPIRITED EXCHANGES
+SPIRITED EXCHANGES
 Highlight 2-3 notable moments — heated debates, points of order, or interventions that shaped the mood of the sitting. Mention the MPs involved by name.
 
-## 🧑‍💼 MEMBER CONTRIBUTIONS
+MEMBER CONTRIBUTIONS
 List key contributions from individual MPs. For each, write one sentence on what position they took or what they said. Format as:
-- **Hon. [Name] ([Constituency]):** Brief summary of their contribution.
+- Hon. [Name] ([Constituency]): Brief summary of their contribution.
 
-## 👥 STAKEHOLDER IMPACT
+STAKEHOLDER IMPACT
 Who wins and who might be burdened by this debate's outcome?
-- **Benefits:** (groups or citizens who stand to gain)
-- **Concerns:** (groups who may face challenges or costs)
+Benefits: (groups or citizens who stand to gain)
+Concerns: (groups who may face challenges or costs)
 
-## 📅 NEXT STEPS
+NEXT STEPS
 What happens next in the legislative calendar? Is the bill going for a second reading, committee stage, or awaiting presidential assent?
 
 ---
 
 Output ONLY the structured report above. Do not add any preamble, conclusion, or commentary outside the sections.
 """
+
+BILL_SUMMARY_PROMPT = """
+You are an expert Kenyan legislative analyst. Analyze the following Bill text and produce a DETAILED, structured report using EXACTLY the section headers below. Be specific, factual, and plain in your language.
+
+IMPORTANT FORMATTING RULES:
+- Do NOT use any markdown symbols such as #, ##, *, **, _, or backticks.
+- Do NOT include any emojis or special symbols.
+- Use plain text only. Section headers should appear in ALL CAPS on their own line.
+- Sub-labels like "Action:", "Status:", or "Financial Cost:" should appear as plain labels followed by a colon.
+
+---
+
+QUICK SUMMARY
+Action: (What does this bill do in one sentence?)
+Target: (Who or what does it apply to?)
+Status: (Where is this bill in the legislative process? e.g. First Reading, Committee Stage, Assented to)
+
+IMPACT SCORECARD
+A quick bulleted overview of the bottom line:
+- Financial Cost: (Estimated public expenditure or financial implications, if stated)
+- Effective Date: (When does it come into force, if mentioned)
+- Key Stakeholders: (List the main groups directly affected, e.g. farmers, county governments, civil servants)
+- Administering Body: (Which ministry, authority, or agency is responsible for implementing this bill?)
+
+KEY PROVISIONS
+Break the bill down into its 3-5 most significant provisions or clauses. For each, write 1-2 sentences explaining what it does in plain language. Format as:
+Provision 1: [explanation]
+Provision 2: [explanation]
+(continue as needed)
+
+THE WHY vs. THE WHY NOT
+Official Justification: (Why did the government or sponsor say this bill is needed? What problem does it solve?)
+Points of Contention: (What are the main criticisms or concerns raised against this bill? Who opposes it and why?)
+
+FLOW OF LEGISLATION
+Describe the step-by-step journey of this bill through parliament. Include: who introduced it, which readings it has gone through, any committee referrals, and what the next step is.
+
+---
+
+Output ONLY the structured report above. Do not add any preamble, conclusion, or commentary outside the sections.
+"""
+
+async def generate_bill_summary(text: str) -> str:
+    """Generates a detailed structured summary of a Bill using Ollama."""
+    summary_text = text[:5000]
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                OLLAMA_API,
+                json={
+                    "model": MODEL_NAME,
+                    "prompt": f"{BILL_SUMMARY_PROMPT}\n\nBILL TEXT:\n{summary_text}",
+                    "stream": False
+                },
+                timeout=TIMEOUT
+            )
+            if response.status_code == 200:
+                result = response.json()
+                if not isinstance(result, dict):
+                    logger.error(f"Unexpected Ollama bill summary response type: {type(result)}")
+                    return "Summary unavailable (Unexpected response)."
+                return result.get('response', '').strip()
+            else:
+                logger.error(f"Ollama bill summary error: Status {response.status_code}, Body: {response.text}")
+                return "Summary generation failed (API error)."
+        except Exception as e:
+            logger.error(f"Ollama bill summarization exception: {type(e).__name__}: {e}")
+            return "Summary generation failed (Exception)."
+    return "Summary unavailable."
 
 def extract_raw_text(pdf_path: str) -> str:
     text = ""

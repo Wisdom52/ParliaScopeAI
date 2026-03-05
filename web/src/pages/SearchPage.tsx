@@ -322,27 +322,45 @@ export const SearchPage: React.FC = () => {
                                     {/* Structured Summary Renderer */}
                                     {selectedHansard.ai_summary ? (() => {
                                         const lines = selectedHansard.ai_summary.split('\n');
+                                        // A section header: a non-empty line that is ALL CAPS or matches known headers, not a bullet
+                                        const isSectionHeader = (line: string) => {
+                                            const t = line.trim();
+                                            if (!t || t.startsWith('-') || t.startsWith('•')) return false;
+                                            // ALL CAPS line (allowing spaces, colons, slashes, & ampersands)
+                                            return t === t.toUpperCase() && t.length > 3 && /[A-Z]/.test(t) && !/^\d/.test(t);
+                                        };
+                                        // A sub-label: line ending with colon like "Action:", "Financial Cost:"
+                                        const isSubLabel = (line: string) => {
+                                            const t = line.trim();
+                                            return /^[A-Z][A-Za-z\s]+:\s/.test(t);
+                                        };
                                         return (
                                             <div style={{ fontSize: '0.95rem', lineHeight: '1.75', color: '#334155' }}>
                                                 {lines.map((line, i) => {
-                                                    if (line.startsWith('## ')) {
+                                                    if (line.trim() === '---' || line.trim() === '') {
+                                                        return <div key={i} style={{ height: line.trim() === '' ? '0.4rem' : 0 }} />;
+                                                    }
+                                                    if (isSectionHeader(line)) {
                                                         return (
-                                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: i === 0 ? 0 : '1.5rem', marginBottom: '0.6rem', fontSize: '1rem', fontWeight: '800', color: '#1e293b', borderBottom: '2px solid var(--primary)', paddingBottom: '0.3rem' }}>
-                                                                {line.replace('## ', '')}
+                                                            <div key={i} style={{ marginTop: i === 0 ? 0 : '1.5rem', marginBottom: '0.6rem', fontSize: '1rem', fontWeight: '800', color: '#1e293b', borderBottom: '2px solid var(--primary)', paddingBottom: '0.3rem' }}>
+                                                                {line.trim()}
                                                             </div>
                                                         );
                                                     }
-                                                    if (line.startsWith('---')) return null;
-                                                    if (line.trim() === '') return <div key={i} style={{ height: '0.4rem' }} />;
-                                                    // Render inline bold (**text**)
-                                                    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                                                    if (isSubLabel(line)) {
+                                                        const colonIdx = line.indexOf(':');
+                                                        const label = line.slice(0, colonIdx);
+                                                        const rest = line.slice(colonIdx + 1);
+                                                        return (
+                                                            <div key={i} style={{ marginBottom: '0.25rem' }}>
+                                                                <strong>{label}:</strong>
+                                                                <span>{rest}</span>
+                                                            </div>
+                                                        );
+                                                    }
                                                     return (
                                                         <div key={i} style={{ marginBottom: '0.25rem' }}>
-                                                            {parts.map((part, j) =>
-                                                                part.startsWith('**') && part.endsWith('**')
-                                                                    ? <strong key={j}>{part.slice(2, -2)}</strong>
-                                                                    : <span key={j}>{part}</span>
-                                                            )}
+                                                            {line}
                                                         </div>
                                                     );
                                                 })}

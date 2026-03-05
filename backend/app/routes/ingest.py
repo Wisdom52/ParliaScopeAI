@@ -5,7 +5,7 @@ from app.services.pdf_parser import process_hansard_pdf
 from app.services.scraper import get_latest_hansard_links, get_latest_bill_links
 from app.models.hansard import Hansard
 from app.models.bill import Bill, BillImpact
-from app.services.ai_pdf_parser import process_hansard_with_ai, extract_raw_text
+from app.services.ai_pdf_parser import process_hansard_with_ai, extract_raw_text, generate_bill_summary
 from app.services.impact_agent import generate_bill_impact
 import shutil
 import tempfile
@@ -54,8 +54,9 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
                         logger.info(f"Starting Impact Analysis for: {link['title']}")
                         raw_text = extract_raw_text(tmp_path)
                         if raw_text:
-                            # Generate simple summary (first 2000 chars for now)
-                            bill.summary = raw_text[:2000] + "..."
+                            # Generate AI-powered structured bill summary
+                            logger.info(f"Generating AI summary for Bill: {link['title']}")
+                            bill.summary = await generate_bill_summary(raw_text)
                             
                             # Generate impacts
                             impacts_data = generate_bill_impact(raw_text[:8000]) # Use first 8k chars for impact analysis
