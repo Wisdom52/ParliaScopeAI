@@ -18,6 +18,21 @@ interface Review {
     created_at: string;
 }
 
+interface StanceRecord {
+    id: number;
+    topic: string;
+    stance: string;
+    analysis: string;
+    consistency_score: number;
+    date_recorded: string;
+}
+
+interface StanceAnalysisResponse {
+    overall_consistency: number;
+    summary: string;
+    topic_breakdown: StanceRecord[];
+}
+
 interface Representative {
     id: number;
     name: string;
@@ -48,6 +63,9 @@ export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> 
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [token, setToken] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'info' | 'stance'>('info');
+    const [stanceData, setStanceData] = useState<StanceAnalysisResponse | null>(null);
+    const [stanceLoading, setStanceLoading] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -79,9 +97,25 @@ export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> 
             const res = await fetch(`${API_BASE_URL}/representatives/${id}`);
             if (res.ok) {
                 setSelectedRep(await res.json());
+                setActiveTab('info');
+                setStanceData(null);
             }
         } catch (e) {
             console.error("Failed to fetch rep detail", e);
+        }
+    };
+
+    const fetchStances = async (id: number) => {
+        setStanceLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/representatives/${id}/stances`);
+            if (res.ok) {
+                setStanceData(await res.json());
+            }
+        } catch (e) {
+            console.error("Failed to fetch stances", e);
+        } finally {
+            setStanceLoading(false);
         }
     };
 
@@ -192,97 +226,162 @@ export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> 
                             <View style={{ width: 24 }} />
                         </View>
 
+                        <View style={styles.tabContainer}>
+                            <TouchableOpacity
+                                style={[styles.tabButton, activeTab === 'info' && styles.activeTabButton]}
+                                onPress={() => setActiveTab('info')}
+                            >
+                                <Text style={[styles.tabText, activeTab === 'info' && styles.activeTabText]}>General Info</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabButton, activeTab === 'stance' && styles.activeTabButton]}
+                                onPress={() => { setActiveTab('stance'); if (!stanceData) fetchStances(selectedRep.id); }}
+                            >
+                                <Text style={[styles.tabText, activeTab === 'stance' && styles.activeTabText]}>Stance Analysis</Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 40 }}>
-                            <View style={styles.profileHeader}>
-                                <Image source={{ uri: selectedRep.image_url }} style={styles.profileImage} />
-                                <Text style={styles.profileName}>{selectedRep.name}</Text>
-                                <View style={styles.profileMeta}>
-                                    <Text style={styles.profileSub}>{selectedRep.party} • {selectedRep.constituency_name || selectedRep.county_name || "National"}</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.statsRow}>
-                                <View style={styles.statBox}>
-                                    <Text style={styles.statVal}>{selectedRep.bills_sponsored}</Text>
-                                    <Text style={styles.statLabel}>Bills</Text>
-                                </View>
-                                <View style={styles.statBox}>
-                                    <Text style={styles.statVal}>{selectedRep.sittings_attended}</Text>
-                                    <Text style={styles.statLabel}>Sittings</Text>
-                                </View>
-                                <View style={styles.statBox}>
-                                    <Text style={styles.statVal}>{selectedRep.votes_cast}</Text>
-                                    <Text style={styles.statLabel}>Votes</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Biography</Text>
-                                <Text style={styles.sectionText}>{selectedRep.bio}</Text>
-                            </View>
-
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Education</Text>
-                                <View style={styles.infoBox}>
-                                    <Text style={styles.infoText}>{selectedRep.education || "Information not available."}</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Experience</Text>
-                                <View style={styles.infoBox}>
-                                    <Text style={styles.infoText}>{selectedRep.experience || "Information not available."}</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.section}>
-                                <View style={styles.reviewHeaderRow}>
-                                    <Text style={styles.sectionTitle}>Citizen Reviews</Text>
-                                    <Text style={styles.reviewCount}>({selectedRep.reviews.length})</Text>
-                                </View>
-
-                                <View style={styles.reviewForm}>
-                                    <Text style={styles.formLabel}>Rate this representative</Text>
-                                    <View style={styles.starRow}>
-                                        {[1, 2, 3, 4, 5].map(s => (
-                                            <TouchableOpacity key={s} onPress={() => setReviewRating(s)}>
-                                                <MaterialCommunityIcons
-                                                    name={s <= reviewRating ? "star" : "star-outline"}
-                                                    size={32}
-                                                    color="#eab308"
-                                                />
-                                            </TouchableOpacity>
-                                        ))}
+                            {activeTab === 'info' ? (
+                                <>
+                                    <View style={styles.profileHeader}>
+                                        <Image source={{ uri: selectedRep.image_url }} style={styles.profileImage} />
+                                        <Text style={styles.profileName}>{selectedRep.name}</Text>
+                                        <View style={styles.profileMeta}>
+                                            <Text style={styles.profileSub}>{selectedRep.party} • {selectedRep.constituency_name || selectedRep.county_name || "National"}</Text>
+                                        </View>
                                     </View>
-                                    <TextInput
-                                        placeholder="Write your review..."
-                                        value={reviewComment}
-                                        onChangeText={setReviewComment}
-                                        style={styles.commentInput}
-                                        multiline
-                                    />
-                                    <Button
-                                        label={submittingReview ? 'Submitting...' : 'Submit Review'}
-                                        onPress={handleReviewSubmit}
-                                        disabled={submittingReview}
-                                    />
-                                </View>
 
-                                {selectedRep.reviews.map(review => (
-                                    <View key={review.id} style={styles.reviewItem}>
-                                        <View style={styles.reviewHead}>
-                                            <Text style={styles.reviewer}>{review.user_name}</Text>
-                                            <View style={styles.miniStarRow}>
-                                                {[...Array(5)].map((_, i) => (
-                                                    <MaterialCommunityIcons key={i} name="star" size={14} color={i < review.rating ? "#eab308" : "#eee"} />
+                                    <View style={styles.statsRow}>
+                                        <View style={styles.statBox}>
+                                            <Text style={styles.statVal}>{selectedRep.bills_sponsored}</Text>
+                                            <Text style={styles.statLabel}>Bills</Text>
+                                        </View>
+                                        <View style={styles.statBox}>
+                                            <Text style={styles.statVal}>{selectedRep.sittings_attended}</Text>
+                                            <Text style={styles.statLabel}>Sittings</Text>
+                                        </View>
+                                        <View style={styles.statBox}>
+                                            <Text style={styles.statVal}>{selectedRep.votes_cast}</Text>
+                                            <Text style={styles.statLabel}>Votes</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.section}>
+                                        <Text style={styles.sectionTitle}>Biography</Text>
+                                        <Text style={styles.sectionText}>{selectedRep.bio}</Text>
+                                    </View>
+
+                                    <View style={styles.section}>
+                                        <Text style={styles.sectionTitle}>Education</Text>
+                                        <View style={styles.infoBox}>
+                                            <Text style={styles.infoText}>{selectedRep.education || "Information not available."}</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.section}>
+                                        <Text style={styles.sectionTitle}>Experience</Text>
+                                        <View style={styles.infoBox}>
+                                            <Text style={styles.infoText}>{selectedRep.experience || "Information not available."}</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.section}>
+                                        <View style={styles.reviewHeaderRow}>
+                                            <Text style={styles.sectionTitle}>Citizen Reviews</Text>
+                                            <Text style={styles.reviewCount}>({selectedRep.reviews.length})</Text>
+                                        </View>
+
+                                        <View style={styles.reviewForm}>
+                                            <Text style={styles.formLabel}>Rate this representative</Text>
+                                            <View style={styles.starRow}>
+                                                {[1, 2, 3, 4, 5].map(s => (
+                                                    <TouchableOpacity key={s} onPress={() => setReviewRating(s)}>
+                                                        <MaterialCommunityIcons
+                                                            name={s <= reviewRating ? "star" : "star-outline"}
+                                                            size={32}
+                                                            color="#eab308"
+                                                        />
+                                                    </TouchableOpacity>
                                                 ))}
                                             </View>
+                                            <TextInput
+                                                placeholder="Write your review..."
+                                                value={reviewComment}
+                                                onChangeText={setReviewComment}
+                                                style={styles.commentInput}
+                                                multiline
+                                            />
+                                            <Button
+                                                label={submittingReview ? 'Submitting...' : 'Submit Review'}
+                                                onPress={handleReviewSubmit}
+                                                disabled={submittingReview}
+                                            />
                                         </View>
-                                        <Text style={styles.reviewComment}>{review.comment}</Text>
-                                        <Text style={styles.reviewDate}>{new Date(review.created_at).toLocaleDateString()}</Text>
+
+                                        {selectedRep.reviews.map(review => (
+                                            <View key={review.id} style={styles.reviewItem}>
+                                                <View style={styles.reviewHead}>
+                                                    <Text style={styles.reviewer}>{review.user_name}</Text>
+                                                    <View style={styles.miniStarRow}>
+                                                        {[...Array(5)].map((_, i) => (
+                                                            <MaterialCommunityIcons key={i} name="star" size={14} color={i < review.rating ? "#eab308" : "#eee"} />
+                                                        ))}
+                                                    </View>
+                                                </View>
+                                                <Text style={styles.reviewComment}>{review.comment}</Text>
+                                                <Text style={styles.reviewDate}>{new Date(review.created_at).toLocaleDateString()}</Text>
+                                            </View>
+                                        ))}
                                     </View>
-                                ))}
-                            </View>
+                                </>
+                            ) : (
+                                <View style={styles.stanceContainer}>
+                                    <View style={styles.consistencySummary}>
+                                        <View style={styles.gaugeContainer}>
+                                            <View style={styles.gaugeBackground}>
+                                                <Text style={styles.gaugeValue}>{stanceLoading ? '...' : `${Math.round(stanceData?.overall_consistency || 0)}%`}</Text>
+                                            </View>
+                                        </View>
+                                        <Text style={styles.consistencyTitle}>Consistency Rating</Text>
+                                        <Text style={styles.consistencySummaryText}>{stanceData?.summary || "Analyzing historical segments..."}</Text>
+                                    </View>
+
+                                    {stanceLoading ? (
+                                        <View style={styles.loadingView}>
+                                            <ActivityIndicator size="large" color="#007AFF" />
+                                            <Text style={styles.loadingText}>AI is analyzing historical stances...</Text>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.topicList}>
+                                            {stanceData?.topic_breakdown.map((item, idx) => (
+                                                <View key={idx} style={styles.topicCard}>
+                                                    <View style={styles.topicHeader}>
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={styles.topicTitle}>{item.topic}</Text>
+                                                            <View style={[
+                                                                styles.statusBadge,
+                                                                item.stance === 'Supportive' ? styles.statusVerified :
+                                                                    item.stance === 'Opposed' ? styles.statusUnverified : styles.statusMixed
+                                                            ]}>
+                                                                <Text style={[
+                                                                    styles.statusBadgeText,
+                                                                    item.stance === 'Supportive' ? styles.statusVerifiedText :
+                                                                        item.stance === 'Opposed' ? styles.statusUnverifiedText : styles.statusMixedText
+                                                                ]}>{item.stance}</Text>
+                                                            </View>
+                                                        </View>
+                                                        <View style={styles.consistencyPill}>
+                                                            <Text style={styles.consistencyPillText}>{item.consistency_score}%</Text>
+                                                        </View>
+                                                    </View>
+                                                    <Text style={styles.topicAnalysis}>{item.analysis}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                </View>
+                            )}
                         </ScrollView>
                     </SafeAreaView>
                 )}
@@ -377,5 +476,144 @@ const styles = StyleSheet.create({
     reviewer: { fontWeight: '700', fontSize: 14, color: '#1a1a1a' },
     miniStarRow: { flexDirection: 'row', gap: 2 },
     reviewComment: { fontSize: 14, color: '#4b5563', lineHeight: 20 },
-    reviewDate: { fontSize: 11, color: '#9ca3af', marginTop: 6 }
+    reviewDate: {
+        fontSize: 12,
+        color: '#9ca3af',
+        marginTop: 4,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    tabButton: {
+        paddingVertical: 12,
+        marginRight: 24,
+        borderBottomWidth: 2,
+        borderBottomColor: 'transparent',
+    },
+    activeTabButton: {
+        borderBottomColor: '#007AFF',
+    },
+    tabText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#666',
+    },
+    activeTabText: {
+        color: '#007AFF',
+    },
+    stanceContainer: {
+        padding: 20,
+    },
+    consistencySummary: {
+        alignItems: 'center',
+        marginBottom: 32,
+    },
+    gaugeContainer: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 8,
+        borderColor: '#f1f5f9',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    gaugeBackground: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    gaugeValue: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#1a1a1a',
+    },
+    consistencyTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    consistencySummaryText: {
+        fontSize: 14,
+        color: '#64748b',
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    loadingView: {
+        alignItems: 'center',
+        padding: 40,
+    },
+    loadingText: {
+        marginTop: 12,
+        color: '#666',
+    },
+    topicList: {
+        gap: 16,
+    },
+    topicCard: {
+        padding: 16,
+        backgroundColor: '#f8fafc',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    topicHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+    },
+    topicTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    statusBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+    },
+    statusVerified: {
+        backgroundColor: '#dcfce7',
+    },
+    statusUnverified: {
+        backgroundColor: '#fee2e2',
+    },
+    statusMixed: {
+        backgroundColor: '#fef9c3',
+    },
+    statusBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    statusVerifiedText: {
+        color: '#166534',
+    },
+    statusUnverifiedText: {
+        color: '#991b1b',
+    },
+    statusMixedText: {
+        color: '#854d0e',
+    },
+    consistencyPill: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    consistencyPillText: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#1e293b',
+    },
+    topicAnalysis: {
+        fontSize: 14,
+        color: '#4b5563',
+        lineHeight: 20,
+    },
 });

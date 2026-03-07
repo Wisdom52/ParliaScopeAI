@@ -8,3 +8,4 @@ from app.models.speech import SpeechSegment
 from app.models.bill import Bill, BillImpact
 from app.models.subscription import Subscription
 from app.models.search_history import SearchHistory
+from app.models.baraza import BarazaMeeting, BarazaPoll, BarazaPollOption, BarazaPollVote, BarazaForumPost, BarazaForumComment

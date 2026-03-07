@@ -3,11 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
 
-from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives
+from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives, representatives_stance, baraza, fact_shield
 from app.routes.ingest import perform_hansard_crawl
-from app.database import SessionLocal
+from app.database import SessionLocal, engine, Base
+import app.models # Trigger models registration
 from fastapi.staticfiles import StaticFiles
 import asyncio
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="ParliaScope API")
 
@@ -44,6 +48,9 @@ app.include_router(docs.router)
 app.include_router(subscriptions.router)
 app.include_router(bills.router)
 app.include_router(representatives.router)
+app.include_router(representatives_stance.router)
+app.include_router(baraza.router)
+app.include_router(fact_shield.router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

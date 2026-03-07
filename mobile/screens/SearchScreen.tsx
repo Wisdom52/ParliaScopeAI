@@ -27,12 +27,25 @@ interface ChatMessage {
     sources?: { speaker: string; preview: string; id: number }[];
 }
 
+interface FactShieldSource {
+    id: number;
+    title: string;
+    type: string;
+    preview: string;
+}
+
+interface FactShieldResult {
+    status: string;
+    analysis: string;
+    sources: FactShieldSource[];
+}
+
 export const SearchScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [documents, setDocuments] = useState<Hansard[]>([]);
     const [docsLoading, setDocsLoading] = useState(false);
     const [selectedDoc, setSelectedDoc] = useState<Hansard | null>(null);
-    const [activeCategory, setActiveCategory] = useState<'parliament' | 'bills'>('parliament');
+    const [activeCategory, setActiveCategory] = useState<'parliament' | 'bills' | 'shield'>('parliament');
 
     // Bills State
     const [token, setToken] = useState<string | null>(null);
@@ -45,6 +58,13 @@ export const SearchScreen = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
+
+    // Fact Check State
+    const [factClaim, setFactClaim] = useState('');
+    const [factUrl, setFactUrl] = useState('');
+    const [factResult, setFactResult] = useState<FactShieldResult | null>(null);
+    const [factLoading, setFactLoading] = useState(false);
+
     const scrollRef = useRef<ScrollView>(null);
 
     const fetchDocs = async () => {
@@ -87,7 +107,7 @@ export const SearchScreen = () => {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.ok) {
-                setTimeout(() => fetchBills(token), 5000);
+                setTimeout(() => fetchBills(), 5000);
             }
         } catch (error) {
             console.error("Failed to start analysis:", error);
@@ -125,6 +145,26 @@ export const SearchScreen = () => {
             setChatMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);
         } finally {
             setChatLoading(false);
+        }
+    };
+
+    const handleFactCheck = async () => {
+        if (!factClaim.trim() && !factUrl.trim()) return;
+        setFactLoading(true);
+        setFactResult(null);
+        try {
+            const response = await fetch(`${API_BASE_URL}/fact-shield/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: factUrl, claim_text: factClaim }),
+            });
+            if (response.ok) {
+                setFactResult(await response.json());
+            }
+        } catch (error) {
+            console.error("Fact check failed", error);
+        } finally {
+            setFactLoading(false);
         }
     };
 
@@ -173,6 +213,13 @@ export const SearchScreen = () => {
                     <MaterialCommunityIcons name="gavel" size={18} color={activeCategory === 'bills' ? '#fff' : '#666'} />
                     <Text style={[styles.pillText, activeCategory === 'bills' && styles.pillActiveText]}>Bills</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.pill, activeCategory === 'shield' && styles.pillActive]}
+                    onPress={() => setActiveCategory('shield')}
+                >
+                    <MaterialCommunityIcons name="shield" size={18} color={activeCategory === 'shield' ? '#fff' : '#666'} />
+                    <Text style={[styles.pillText, activeCategory === 'shield' && styles.pillActiveText]}>Shield</Text>
+                </TouchableOpacity>
             </View>
 
             {activeCategory === 'parliament' ? (
@@ -196,12 +243,12 @@ export const SearchScreen = () => {
                     )}
                     ListEmptyComponent={docsLoading ? <ActivityIndicator style={{ marginTop: 20 }} /> : <Text style={styles.emptyText}>No matching Hansards found.</Text>}
                 />
-            ) : (
+            ) : activeCategory === 'bills' ? (
                 <FlatList
                     data={filteredBills}
                     keyExtractor={item => item.id.toString()}
                     refreshing={billsLoading}
-                    onRefresh={() => fetchBills(token)}
+                    onRefresh={() => fetchBills()}
                     renderItem={({ item }) => (
                         <View style={styles.billCard}>
                             <View style={styles.billHeader}>
@@ -223,6 +270,81 @@ export const SearchScreen = () => {
                     )}
                     ListEmptyComponent={billsLoading ? <ActivityIndicator style={{ marginTop: 20 }} /> : <Text style={styles.emptyText}>No matching Bills found.</Text>}
                 />
+            ) : (
+                <ScrollView contentContainerStyle={styles.shieldSection}>
+                    <View style={styles.shieldHeader}>
+                        <MaterialCommunityIcons name="shield-search" size={32} color="#007AFF" />
+                        <Text style={styles.shieldTitle}>Fact-Shield Hub</Text>
+                        <Text style={styles.shieldSub}>AI Verification Engine</Text>
+                    </View>
+
+                    <View style={styles.shieldInputCard}>
+                        <Text style={styles.inputLabel}>Parliamentary Video or Article Link</Text>
+                        <TextInput
+                            style={styles.shieldInput}
+                            placeholder="Paste YouTube link here..."
+                            value={factUrl}
+                            onChangeText={setFactUrl}
+                        />
+
+                        <Text style={[styles.inputLabel, { marginTop: 15 }]}>What are we verifying?</Text>
+                        <TextInput
+                            style={[styles.shieldInput, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+                            placeholder="Explain the claim you want to verify..."
+                            multiline
+                            value={factClaim}
+                            onChangeText={setFactClaim}
+                        />
+
+                        <TouchableOpacity
+                            style={[styles.shieldButton, (factLoading || (!factClaim && !factUrl)) && { opacity: 0.6 }]}
+                            onPress={handleFactCheck}
+                            disabled={factLoading || (!factClaim && !factUrl)}
+                        >
+                            {factLoading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" />
+                                    <Text style={styles.shieldButtonText}>Verify Claim</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
+                    {factResult && (
+                        <View style={styles.resultCard}>
+                            <View style={styles.resultHeader}>
+                                <View style={[
+                                    styles.statusBadge,
+                                    factResult.status === 'Verified' ? styles.statusVerified :
+                                        factResult.status === 'Unverified' ? styles.statusUnverified : styles.statusMixed
+                                ]}>
+                                    <Text style={[
+                                        styles.statusText,
+                                        factResult.status === 'Verified' ? styles.statusVerifiedText :
+                                            factResult.status === 'Unverified' ? styles.statusUnverifiedText : styles.statusMixedText
+                                    ]}>{factResult.status}</Text>
+                                </View>
+                                <Text style={styles.resultTitle}>Assessment</Text>
+                            </View>
+
+                            <Text style={styles.resultAnalysis}>{factResult.analysis}</Text>
+
+                            {factResult.sources && factResult.sources.length > 0 && (
+                                <View style={styles.sourcesSection}>
+                                    <Text style={styles.sourcesHeader}>Supporting Records:</Text>
+                                    {factResult.sources.map(source => (
+                                        <View key={source.id} style={styles.shieldSourceItem}>
+                                            <Text style={styles.sourceTitle}>{source.title}</Text>
+                                            <Text style={styles.sourcePreview} numberOfLines={2}>"{source.preview}"</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    )}
+                </ScrollView>
             )}
 
             {/* Document / Bill Modal with Contextual Chat */}
@@ -376,6 +498,34 @@ const styles = StyleSheet.create({
     sourceItem: { fontSize: 11, fontStyle: 'italic', color: '#666' },
     chatInputRow: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     chatInput: { flex: 1, height: 48, backgroundColor: '#f5f5f5', borderRadius: 24, paddingHorizontal: 20, fontSize: 15, color: '#1a1a1a', marginRight: 10 },
-    sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' }
+    sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' },
+
+    // Shield Styles
+    shieldSection: { padding: 20, paddingBottom: 100 },
+    shieldHeader: { alignItems: 'center', marginBottom: 25 },
+    shieldTitle: { fontSize: 24, fontWeight: '900', color: '#1a1a1a', marginTop: 10 },
+    shieldSub: { fontSize: 12, fontWeight: '700', color: '#007AFF', textTransform: 'uppercase' },
+    shieldInputCard: { padding: 20, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#f0f0f0', shadowColor: '#000', shadowOpacity: 0.05, elevation: 2 },
+    inputLabel: { fontSize: 13, fontWeight: '700', color: '#666', marginBottom: 8 },
+    shieldInput: { backgroundColor: '#f9f9f9', borderRadius: 12, paddingHorizontal: 15, height: 50, fontSize: 14, color: '#1a1a1a', borderWidth: 1, borderColor: '#eee' },
+    shieldButton: { backgroundColor: '#007AFF', height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20 },
+    shieldButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    resultCard: { marginTop: 25, padding: 20, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#f0f0f0' },
+    resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 15 },
+    resultTitle: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    statusText: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+    statusVerified: { backgroundColor: '#dcfce7' },
+    statusVerifiedText: { color: '#166534' },
+    statusUnverified: { backgroundColor: '#fee2e2' },
+    statusUnverifiedText: { color: '#991b1b' },
+    statusMixed: { backgroundColor: '#fef9c3' },
+    statusMixedText: { color: '#854d0e' },
+    resultAnalysis: { fontSize: 15, lineHeight: 24, color: '#334155' },
+    sourcesSection: { marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+    sourcesHeader: { fontSize: 12, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 12 },
+    shieldSourceItem: { marginBottom: 15, padding: 12, backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#edf2f7' },
+    sourceTitle: { fontSize: 13, fontWeight: '700', color: '#007AFF', marginBottom: 4 },
+    sourcePreview: { fontSize: 12, color: '#666', fontStyle: 'italic' }
 });
 

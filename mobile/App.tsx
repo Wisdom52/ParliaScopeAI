@@ -10,14 +10,16 @@ import { DailyScreen } from './screens/DailyScreen';
 import { RepresentativeScreen } from './screens/RepresentativeScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { BarazaScreen } from './screens/BarazaScreen';
 import { API_BASE_URL } from './config/api';
 
-type TabId = 'daily' | 'docs' | 'representative' | 'profile';
+type TabId = 'daily' | 'docs' | 'baraza' | 'representative' | 'profile';
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
     { id: 'daily', label: 'Daily', icon: 'calendar-blank' },
     { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
-    { id: 'representative', label: 'Representative', icon: 'account-group-outline' },
+    { id: 'baraza', label: 'Baraza', icon: 'forum-outline' },
+    { id: 'representative', label: 'Leaders', icon: 'account-group-outline' },
     { id: 'profile', label: 'Profile', icon: 'account-outline' },
 ];
 
@@ -72,6 +74,7 @@ export default function App() {
                 {/* Tab Content */}
                 {activeTab === 'daily' && <DailyScreen />}
                 {activeTab === 'docs' && <SearchScreen />}
+                {activeTab === 'baraza' && <BarazaScreen onSwitchToProfile={() => setActiveTab('profile')} user={user} />}
                 {activeTab === 'representative' && <RepresentativeScreen onSwitchToProfile={() => setActiveTab('profile')} />}
                 {activeTab === 'profile' && (
                     user ? (

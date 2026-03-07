@@ -165,3 +165,189 @@ class SpeakerOut(SpeakerBase):
 
     class Config:
         from_attributes = True
+
+# --- Digital Baraza ---
+class BarazaMeetingBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    scheduled_at: datetime
+    meeting_link: Optional[str] = None
+    host_id: Optional[int] = None
+    speaker_id: Optional[int] = None
+
+class BarazaMeetingCreate(BarazaMeetingBase):
+    pass
+
+class BarazaMeetingUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+    meeting_link: Optional[str] = None
+
+class BarazaMeetingOut(BarazaMeetingBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class BarazaPollOptionBase(BaseModel):
+    text: str
+
+class BarazaPollOptionCreate(BarazaPollOptionBase):
+    pass
+
+class BarazaPollOptionOut(BarazaPollOptionBase):
+    id: int
+    poll_id: int
+    vote_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+class BarazaPollBase(BaseModel):
+    question: str
+    poll_type: str = "choice" # choice, checkbox, boolean, text
+    expires_at: Optional[datetime] = None
+    is_active: bool = True
+
+class BarazaPollCreate(BarazaPollBase):
+    options: List[BarazaPollOptionCreate]
+
+class BarazaPollUpdate(BaseModel):
+    question: Optional[str] = None
+    poll_type: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    is_active: Optional[bool] = None
+
+class BarazaPollOut(BarazaPollBase):
+    id: int
+    creator_id: Optional[int] = None
+    created_at: datetime
+    options: List[BarazaPollOptionOut]
+
+    class Config:
+        from_attributes = True
+
+class BarazaPollVoteCreate(BaseModel):
+    poll_id: int
+    option_id: int
+
+class BarazaForumCommentBase(BaseModel):
+    content: str
+
+class BarazaForumCommentCreate(BarazaForumCommentBase):
+    post_id: int
+
+class BarazaForumCommentOut(BarazaForumCommentBase):
+    id: int
+    post_id: int
+    author_id: int
+    author_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class BarazaForumPostBase(BaseModel):
+    title: str
+    content: str
+
+class BarazaForumPostCreate(BarazaForumPostBase):
+    pass
+
+class BarazaForumPostOut(BarazaForumPostBase):
+    id: int
+    author_id: int
+    author_name: Optional[str] = None
+    created_at: datetime
+    comments: List[BarazaForumCommentOut] = []
+
+    class Config:
+        from_attributes = True
+
+class BarazaLivePulseCreate(BaseModel):
+    type: str
+
+class BarazaLivePulseOut(BaseModel):
+    id: int
+    type: str
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# --- Civic IQ & Gamification ---
+class BarazaQuestionOut(BaseModel):
+    id: int
+    question_text: str
+    options: str # JSON encoded list
+    correct_option_index: int
+
+    class Config:
+        from_attributes = True
+
+class BarazaQuizOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    icon: Optional[str]
+    points_reward: int
+    questions: List[BarazaQuestionOut] = []
+
+    class Config:
+        from_attributes = True
+
+class BarazaUserScoreOut(BaseModel):
+    prosperity_points: int
+
+    class Config:
+        from_attributes = True
+
+class BarazaBadgeOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    icon_url: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+class BarazaGamificationStatus(BaseModel):
+    prosperity_points: int
+    badges: List[BarazaBadgeOut]
+
+# --- Fact-Shield Verification ---
+class FactShieldRequest(BaseModel):
+    url: Optional[str] = None
+    claim_text: Optional[str] = None
+
+class FactShieldSource(BaseModel):
+    id: int
+    title: str
+    type: str # 'hansard' or 'bill'
+    preview: str
+
+class FactShieldResponse(BaseModel):
+    status: str # 'Verified', 'Unverified', 'Mixed', 'Inconclusive'
+    analysis: str
+    explanation: Optional[str] = None
+    sources: List[FactShieldSource] = []
+# --- Stance Analysis ---
+class StanceRecord(BaseModel):
+    id: int
+    topic: str
+    stance: str
+    analysis: str
+    consistency_score: float
+    date_recorded: datetime
+    evidence_ids: List[int] = []
+
+    class Config:
+        from_attributes = True
+
+class StanceAnalysisResponse(BaseModel):
+    overall_consistency: float
+    summary: str
+    topic_breakdown: List[StanceRecord]

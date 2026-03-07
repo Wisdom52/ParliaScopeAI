@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
-import { useAuth } from '../context/AuthContext';
-import { Loader2, FileText, Activity, Send, MessageSquare, Search, X } from 'lucide-react';
+import { Loader2, FileText, Activity, Send, MessageSquare, Search, X, Shield } from 'lucide-react';
 
 interface Hansard {
     id: number;
@@ -25,15 +24,27 @@ interface ChatMessage {
     sources?: { speaker: string; preview: string; id: number }[];
 }
 
+interface FactShieldSource {
+    id: number;
+    title: string;
+    type: string;
+    preview: string;
+}
+
+interface FactShieldResult {
+    status: string;
+    analysis: string;
+    sources: FactShieldSource[];
+}
+
 export const SearchPage: React.FC = () => {
-    const { token } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [documents, setDocuments] = useState<Hansard[]>([]);
     const [docsLoading, setDocsLoading] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [useAiParsing, setUseAiParsing] = useState(false);
     const [selectedHansard, setSelectedHansard] = useState<Hansard | null>(null);
-    const [activeCategory, setActiveCategory] = useState<'parliament' | 'bills'>('parliament');
+    const [activeCategory, setActiveCategory] = useState<'parliament' | 'bills' | 'shield'>('parliament');
 
     // Bills State
     const [bills, setBills] = useState<Bill[]>([]);
@@ -43,6 +54,12 @@ export const SearchPage: React.FC = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
+
+    // Fact Check State
+    const [factClaim, setFactClaim] = useState('');
+    const [factUrl, setFactUrl] = useState('');
+    const [factResult, setFactResult] = useState<FactShieldResult | null>(null);
+    const [factLoading, setFactLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     const fetchDocs = async () => {
@@ -135,6 +152,27 @@ export const SearchPage: React.FC = () => {
         }
     };
 
+    const handleFactCheck = async () => {
+        if (!factClaim.trim() && !factUrl.trim()) return;
+        setFactLoading(true);
+        setFactResult(null);
+        try {
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiBase}/fact-shield/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: factUrl, claim_text: factClaim }),
+            });
+            if (response.ok) {
+                setFactResult(await response.json());
+            }
+        } catch (error) {
+            console.error("Fact check failed", error);
+        } finally {
+            setFactLoading(false);
+        }
+    };
+
     const filteredDocs = documents.filter(doc =>
         doc.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -211,6 +249,24 @@ export const SearchPage: React.FC = () => {
                     >
                         <Activity size={16} /> Bills
                     </button>
+                    <button
+                        onClick={() => setActiveCategory('shield')}
+                        style={{
+                            padding: '0.6rem 1.25rem',
+                            borderRadius: '2rem',
+                            border: '1px solid ' + (activeCategory === 'shield' ? 'var(--primary)' : 'var(--border)'),
+                            background: activeCategory === 'shield' ? 'var(--primary)' : 'white',
+                            color: activeCategory === 'shield' ? 'white' : '#666',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.9rem'
+                        }}
+                    >
+                        <Shield size={16} /> Shield
+                    </button>
                 </div>
 
                 {activeCategory === 'parliament' ? (
@@ -259,7 +315,7 @@ export const SearchPage: React.FC = () => {
                             </div>
                         )}
                     </div>
-                ) : (
+                ) : activeCategory === 'bills' ? (
                     <div className="bills-section">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                             <h3 style={{ fontSize: '1.25rem', color: 'var(--primary)', margin: 0 }}>Legislative Bills</h3>
@@ -298,164 +354,238 @@ export const SearchPage: React.FC = () => {
                             </div>
                         )}
                     </div>
-                )}
+                ) : (
+                    <div className="shield-section" style={{ padding: '2rem', background: '#f8fafc', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                        <div style={{ marginBottom: '2rem' }}>
+                            <h3 style={{ fontSize: '1.5rem', color: 'var(--primary)', marginBottom: '0.5rem' }}>Fact-Shield Verification</h3>
+                            <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Cross-reference external claims against official Parliamentary records using AI.</p>
+                        </div>
 
-                {selectedHansard && (
-                    <div className="summary-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }} onClick={() => setSelectedHansard(null)}>
-                        <div className="summary-modal" style={{ backgroundColor: 'white', borderRadius: '1.25rem', maxWidth: '1000px', width: '95%', height: '85vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }} onClick={e => e.stopPropagation()}>
-                            {/* Modal Header */}
-                            <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0, color: '#1a1a1a' }}>{selectedHansard.title}</h2>
-                                    <span style={{ fontSize: '0.85rem', color: '#666' }}>AI Document Analysis Hub</span>
-                                </div>
-                                <button style={{ background: '#f5f5f5', border: 'none', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedHansard(null)}><X size={20} /></button>
+                        <div style={{ display: 'grid', gap: '1.5rem', maxWidth: '800px' }}>
+                            <div className="input-field">
+                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.5rem', color: '#334155' }}>External Link (YouTube, Article, etc.)</label>
+                                <input
+                                    type="text"
+                                    placeholder="https://www.youtube.com/watch?v=..."
+                                    value={factUrl}
+                                    onChange={(e) => setFactUrl(e.target.value)}
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none' }}
+                                />
                             </div>
 
-                            {/* Modal Content - Dual Pane */}
-                            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                                {/* Left Pane: Summary */}
-                                <div style={{ flex: 1, padding: '2rem', overflowY: 'auto', borderRight: '1px solid #f0f0f0', background: '#fafafa' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--primary)', fontWeight: '700', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        <FileText size={18} /> Official Summary
+                            <div className="input-field">
+                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.5rem', color: '#334155' }}>Specific Claim or Context (Optional)</label>
+                                <textarea
+                                    placeholder="e.g. The MP for Lang'ata claimed that the new bill would reduce taxes by 20%..."
+                                    value={factClaim}
+                                    onChange={(e) => setFactClaim(e.target.value)}
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', minHeight: '100px', resize: 'vertical' }}
+                                />
+                            </div>
+
+                            <Button
+                                label={factLoading ? "Verifying..." : "Verify Claim"}
+                                onPress={handleFactCheck}
+                                disabled={factLoading || (!factClaim.trim() && !factUrl.trim())}
+                            />
+                        </div>
+
+                        {factResult && (
+                            <div style={{ marginTop: '2.5rem', padding: '2rem', background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                    <div style={{
+                                        padding: '0.4rem 1rem',
+                                        borderRadius: '2rem',
+                                        fontWeight: '800',
+                                        fontSize: '0.85rem',
+                                        textTransform: 'uppercase',
+                                        background: factResult.status === 'Verified' ? '#DCFCE7' : factResult.status === 'Unverified' ? '#FEE2E2' : '#FEF9C3',
+                                        color: factResult.status === 'Verified' ? '#166534' : factResult.status === 'Unverified' ? '#991B1B' : '#854D0E'
+                                    }}>
+                                        {factResult.status}
                                     </div>
-                                    {/* Structured Summary Renderer */}
-                                    {selectedHansard.ai_summary ? (() => {
-                                        const lines = selectedHansard.ai_summary.split('\n');
-                                        // A section header: a non-empty line that is ALL CAPS or matches known headers, not a bullet
-                                        const isSectionHeader = (line: string) => {
-                                            const t = line.trim();
-                                            if (!t || t.startsWith('-') || t.startsWith('•')) return false;
-                                            // ALL CAPS line (allowing spaces, colons, slashes, & ampersands)
-                                            return t === t.toUpperCase() && t.length > 3 && /[A-Z]/.test(t) && !/^\d/.test(t);
-                                        };
-                                        // A sub-label: line ending with colon like "Action:", "Financial Cost:"
-                                        const isSubLabel = (line: string) => {
-                                            const t = line.trim();
-                                            return /^[A-Z][A-Za-z\s]+:\s/.test(t);
-                                        };
-                                        return (
-                                            <div style={{ fontSize: '0.95rem', lineHeight: '1.75', color: '#334155' }}>
-                                                {lines.map((line, i) => {
-                                                    if (line.trim() === '---' || line.trim() === '') {
-                                                        return <div key={i} style={{ height: line.trim() === '' ? '0.4rem' : 0 }} />;
-                                                    }
-                                                    if (isSectionHeader(line)) {
-                                                        return (
-                                                            <div key={i} style={{ marginTop: i === 0 ? 0 : '1.5rem', marginBottom: '0.6rem', fontSize: '1rem', fontWeight: '800', color: '#1e293b', borderBottom: '2px solid var(--primary)', paddingBottom: '0.3rem' }}>
-                                                                {line.trim()}
-                                                            </div>
-                                                        );
-                                                    }
-                                                    if (isSubLabel(line)) {
-                                                        const colonIdx = line.indexOf(':');
-                                                        const label = line.slice(0, colonIdx);
-                                                        const rest = line.slice(colonIdx + 1);
-                                                        return (
-                                                            <div key={i} style={{ marginBottom: '0.25rem' }}>
-                                                                <strong>{label}:</strong>
-                                                                <span>{rest}</span>
-                                                            </div>
-                                                        );
-                                                    }
-                                                    return (
-                                                        <div key={i} style={{ marginBottom: '0.25rem' }}>
-                                                            {line}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        );
-                                    })() : (
-                                        <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>
-                                            System is still generating the summary for this document. Please check back in a few moments.
-                                        </div>
-                                    )}
+                                    <h4 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>AI Verification Analysis</h4>
                                 </div>
 
-                                {/* Right Pane: Chat */}
-                                <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', background: 'white' }}>
-                                    <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f0f0f0', background: '#fff', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <div style={{ width: '8px', height: '8px', background: '#10B981', borderRadius: '50%' }}></div>
-                                        <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#334155' }}>Contextual AI Chat</span>
-                                    </div>
+                                <p style={{ fontSize: '1rem', lineHeight: '1.6', color: '#334155', marginBottom: '2rem' }}>{factResult.analysis}</p>
 
-                                    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        {chatMessages.length === 0 && (
-                                            <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '3rem' }}>
-                                                <MessageSquare size={32} style={{ margin: '0 auto 1rem', opacity: 0.2 }} />
-                                                <p style={{ fontSize: '0.9rem' }}>Ask specific questions about this document.<br />The AI will search the transcript for you.</p>
+                                {factResult.sources && factResult.sources.length > 0 && (
+                                    <div>
+                                        <h5 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>Supporting Sources</h5>
+                                        <div style={{ display: 'grid', gap: '1rem' }}>
+                                            {factResult.sources.map(source => (
+                                                <div key={source.id} style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                                    <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--primary)', marginBottom: '0.3rem' }}>{source.title}</div>
+                                                    <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0, fontStyle: 'italic' }}>"{source.preview}"</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+
+                {
+                    selectedHansard && (
+                        <div className="summary-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }} onClick={() => setSelectedHansard(null)}>
+                            <div className="summary-modal" style={{ backgroundColor: 'white', borderRadius: '1.25rem', maxWidth: '1000px', width: '95%', height: '85vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }} onClick={e => e.stopPropagation()}>
+                                {/* Modal Header */}
+                                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h2 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0, color: '#1a1a1a' }}>{selectedHansard.title}</h2>
+                                        <span style={{ fontSize: '0.85rem', color: '#666' }}>AI Document Analysis Hub</span>
+                                    </div>
+                                    <button style={{ background: '#f5f5f5', border: 'none', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedHansard(null)}><X size={20} /></button>
+                                </div>
+
+                                {/* Modal Content - Dual Pane */}
+                                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                                    {/* Left Pane: Summary */}
+                                    <div style={{ flex: 1, padding: '2rem', overflowY: 'auto', borderRight: '1px solid #f0f0f0', background: '#fafafa' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--primary)', fontWeight: '700', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                            <FileText size={18} /> Official Summary
+                                        </div>
+                                        {/* Structured Summary Renderer */}
+                                        {selectedHansard.ai_summary ? (() => {
+                                            const lines = selectedHansard.ai_summary.split('\n');
+                                            // A section header: a non-empty line that is ALL CAPS or matches known headers, not a bullet
+                                            const isSectionHeader = (line: string) => {
+                                                const t = line.trim();
+                                                if (!t || t.startsWith('-') || t.startsWith('•')) return false;
+                                                // ALL CAPS line (allowing spaces, colons, slashes, & ampersands)
+                                                return t === t.toUpperCase() && t.length > 3 && /[A-Z]/.test(t) && !/^\d/.test(t);
+                                            };
+                                            // A sub-label: line ending with colon like "Action:", "Financial Cost:"
+                                            const isSubLabel = (line: string) => {
+                                                const t = line.trim();
+                                                return /^[A-Z][A-Za-z\s]+:\s/.test(t);
+                                            };
+                                            return (
+                                                <div style={{ fontSize: '0.95rem', lineHeight: '1.75', color: '#334155' }}>
+                                                    {lines.map((line, i) => {
+                                                        if (line.trim() === '---' || line.trim() === '') {
+                                                            return <div key={i} style={{ height: line.trim() === '' ? '0.4rem' : 0 }} />;
+                                                        }
+                                                        if (isSectionHeader(line)) {
+                                                            return (
+                                                                <div key={i} style={{ marginTop: i === 0 ? 0 : '1.5rem', marginBottom: '0.6rem', fontSize: '1rem', fontWeight: '800', color: '#1e293b', borderBottom: '2px solid var(--primary)', paddingBottom: '0.3rem' }}>
+                                                                    {line.trim()}
+                                                                </div>
+                                                            );
+                                                        }
+                                                        if (isSubLabel(line)) {
+                                                            const colonIdx = line.indexOf(':');
+                                                            const label = line.slice(0, colonIdx);
+                                                            const rest = line.slice(colonIdx + 1);
+                                                            return (
+                                                                <div key={i} style={{ marginBottom: '0.25rem' }}>
+                                                                    <strong>{label}:</strong>
+                                                                    <span>{rest}</span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div key={i} style={{ marginBottom: '0.25rem' }}>
+                                                                {line}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })() : (
+                                            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>
+                                                System is still generating the summary for this document. Please check back in a few moments.
                                             </div>
                                         )}
-                                        {chatMessages.map((msg, idx) => (
-                                            <div key={idx} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
-                                                <div style={{
-                                                    padding: '0.85rem 1.1rem',
-                                                    borderRadius: '1.25rem',
-                                                    background: msg.role === 'user' ? 'var(--primary)' : '#f1f5f9',
-                                                    color: msg.role === 'user' ? 'white' : '#1e293b',
-                                                    fontSize: '0.95rem',
-                                                    lineHeight: '1.5',
-                                                    marginTop: '0.25rem',
-                                                    fontWeight: msg.role === 'assistant' ? '400' : '500',
-                                                    boxShadow: msg.role === 'assistant' ? 'none' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                                                }}>
-                                                    {msg.content}
-                                                </div>
-                                                {msg.sources && msg.sources.length > 0 && (
-                                                    <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '8px', borderLeft: '3px solid #cbd5e1' }}>
-                                                        <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Citations:</span>
-                                                        {msg.sources.slice(0, 2).map(s => (
-                                                            <div key={s.id} style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem', fontStyle: 'italic' }}>
-                                                                "{s.preview}" — {s.speaker}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                        {chatLoading && <div style={{ alignSelf: 'flex-start', padding: '1rem', background: '#f1f5f9', borderRadius: '1rem', fontSize: '0.9rem', color: '#64748b' }}>AI is analyzing transcripts...</div>}
-                                        <div ref={chatEndRef} />
                                     </div>
 
-                                    <div style={{ padding: '1.5rem', borderTop: '1px solid #f0f0f0' }}>
-                                        <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', padding: '0.5rem', borderRadius: '1.5rem', border: '1px solid #e2e8f0' }}>
-                                            <input
-                                                type="text"
-                                                placeholder="Ask about speakers, topics, or full questions..."
-                                                value={chatInput}
-                                                onChange={(e) => setChatInput(e.target.value)}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
-                                                style={{ flex: 1, background: 'transparent', border: 'none', padding: '0.5rem 1rem', outline: 'none', fontSize: '0.95rem' }}
-                                            />
-                                            <button
-                                                onClick={handleSendChat}
-                                                disabled={chatLoading || !chatInput.trim()}
-                                                style={{
-                                                    background: 'var(--primary)',
-                                                    border: 'none',
-                                                    width: '40px',
-                                                    height: '40px',
-                                                    borderRadius: '50%',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    color: 'white',
-                                                    cursor: 'pointer',
-                                                    transition: 'opacity 0.2s'
-                                                }}
-                                            >
-                                                <Send size={18} />
-                                            </button>
+                                    {/* Right Pane: Chat */}
+                                    <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', background: 'white' }}>
+                                        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f0f0f0', background: '#fff', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <div style={{ width: '8px', height: '8px', background: '#10B981', borderRadius: '50%' }}></div>
+                                            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#334155' }}>Contextual AI Chat</span>
+                                        </div>
+
+                                        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                            {chatMessages.length === 0 && (
+                                                <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '3rem' }}>
+                                                    <MessageSquare size={32} style={{ margin: '0 auto 1rem', opacity: 0.2 }} />
+                                                    <p style={{ fontSize: '0.9rem' }}>Ask specific questions about this document.<br />The AI will search the transcript for you.</p>
+                                                </div>
+                                            )}
+                                            {chatMessages.map((msg, idx) => (
+                                                <div key={idx} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                                                    <div style={{
+                                                        padding: '0.85rem 1.1rem',
+                                                        borderRadius: '1.25rem',
+                                                        background: msg.role === 'user' ? 'var(--primary)' : '#f1f5f9',
+                                                        color: msg.role === 'user' ? 'white' : '#1e293b',
+                                                        fontSize: '0.95rem',
+                                                        lineHeight: '1.5',
+                                                        marginTop: '0.25rem',
+                                                        fontWeight: msg.role === 'assistant' ? '400' : '500',
+                                                        boxShadow: msg.role === 'assistant' ? 'none' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                                    }}>
+                                                        {msg.content}
+                                                    </div>
+                                                    {msg.sources && msg.sources.length > 0 && (
+                                                        <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '8px', borderLeft: '3px solid #cbd5e1' }}>
+                                                            <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Citations:</span>
+                                                            {msg.sources.slice(0, 2).map(s => (
+                                                                <div key={s.id} style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem', fontStyle: 'italic' }}>
+                                                                    "{s.preview}" — {s.speaker}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {chatLoading && <div style={{ alignSelf: 'flex-start', padding: '1rem', background: '#f1f5f9', borderRadius: '1rem', fontSize: '0.9rem', color: '#64748b' }}>AI is analyzing transcripts...</div>}
+                                            <div ref={chatEndRef} />
+                                        </div>
+
+                                        <div style={{ padding: '1.5rem', borderTop: '1px solid #f0f0f0' }}>
+                                            <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', padding: '0.5rem', borderRadius: '1.5rem', border: '1px solid #e2e8f0' }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ask about speakers, topics, or full questions..."
+                                                    value={chatInput}
+                                                    onChange={(e) => setChatInput(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
+                                                    style={{ flex: 1, background: 'transparent', border: 'none', padding: '0.5rem 1rem', outline: 'none', fontSize: '0.95rem' }}
+                                                />
+                                                <button
+                                                    onClick={handleSendChat}
+                                                    disabled={chatLoading || !chatInput.trim()}
+                                                    style={{
+                                                        background: 'var(--primary)',
+                                                        border: 'none',
+                                                        width: '40px',
+                                                        height: '40px',
+                                                        borderRadius: '50%',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: 'white',
+                                                        cursor: 'pointer',
+                                                        transition: 'opacity 0.2s'
+                                                    }}
+                                                >
+                                                    <Send size={18} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                )}
-            </div>
-        </div>
+                    )
+                }
+            </div >
+        </div >
     );
 };
 

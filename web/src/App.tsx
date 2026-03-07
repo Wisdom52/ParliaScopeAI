@@ -1,19 +1,21 @@
 import { useState } from 'react';
-import { FileText, Calendar, User, Users } from 'lucide-react';
+import { FileText, Calendar, User, Users, MessageSquare } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Onboarding } from './pages/Onboarding';
 import { ProfilePage } from './pages/ProfilePage';
 import { SearchPage } from './pages/SearchPage';
 import { DailyPage } from './pages/DailyPage';
 import { RepresentativesPage } from './pages/RepresentativesPage';
+import { BarazaPage } from './pages/BarazaPage';
 import './App.css';
 
-type TabId = 'docs' | 'daily' | 'representative' | 'profile';
+type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'daily', label: 'Daily', icon: <Calendar size={18} /> },
   { id: 'docs', label: 'Docs', icon: <FileText size={18} /> },
-  { id: 'representative', label: 'Representative', icon: <Users size={18} /> },
+  { id: 'baraza', label: 'Baraza', icon: <MessageSquare size={18} /> },
+  { id: 'representative', label: 'Leaders', icon: <Users size={18} /> },
   { id: 'profile', label: 'Profile', icon: <User size={18} /> },
 ];
 
@@ -58,6 +60,7 @@ function AppContent() {
       <main className="tab-content">
         {activeTab === 'daily' && <DailyPage />}
         {activeTab === 'docs' && <SearchPage />}
+        {activeTab === 'baraza' && <BarazaPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'profile' && (
           user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => setActiveTab('profile')} />
