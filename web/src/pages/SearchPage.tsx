@@ -128,10 +128,12 @@ export const SearchPage: React.FC = () => {
         setChatInput('');
 
         try {
-            const response = await fetch('http://localhost:8000/chat/hansard', {
+            const docId = selectedHansard?.id;
+            const docType = activeCategory === 'bills' ? 'bill' : 'hansard';
+            const response = await fetch('http://localhost:8000/chat/document', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: userMsg.content }),
+                body: JSON.stringify({ query: userMsg.content, document_id: docId, doc_type: docType }),
             });
 
             const data = await response.json();

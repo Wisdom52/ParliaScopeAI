@@ -5,7 +5,7 @@ from typing import List
 from app.database import get_db
 from app.models.baraza import (
     BarazaMeeting, BarazaPoll, BarazaPollOption, BarazaPollVote, 
-    BarazaForumPost, BarazaForumComment, BarazaLivePulse,
+    BarazaForumPost, BarazaForumComment, BarazaLivePulse, BarazaLiveChat,
     BarazaQuiz, BarazaQuestion, BarazaUserScore, BarazaBadge, BarazaUserBadge
 )
 from app.models.user import User
@@ -16,6 +16,7 @@ from app.schemas import (
     BarazaForumCommentCreate, BarazaForumCommentOut,
     BarazaUserScoreOut, BarazaBadgeOut,
     BarazaLivePulseCreate, BarazaLivePulseOut,
+    BarazaLiveChatCreate, BarazaLiveChatOut,
     BarazaQuizOut, BarazaGamificationStatus
 )
 from app.routes.auth import get_current_user
@@ -244,6 +245,32 @@ async def get_pulse_stats(db: Session = Depends(get_db)):
     # Simple all-time count for now
     results = db.query(BarazaLivePulse.type, func.count(BarazaLivePulse.id)).group_by(BarazaLivePulse.type).all()
     return {r[0]: r[1] for r in results}
+
+@router.get("/live/chat", response_model=List[BarazaLiveChatOut])
+def get_live_chats(db: Session = Depends(get_db)):
+    # Fetch the 50 most recent chats
+    chats = db.query(BarazaLiveChat).order_by(BarazaLiveChat.created_at.desc()).limit(50).all()
+    # Reverse to return oldest to newest (better for UI appending)
+    chats.reverse()
+    for chat in chats:
+        chat.user_name = chat.user.full_name if chat.user else "Citizen"
+    return chats
+
+@router.post("/live/chat", response_model=BarazaLiveChatOut)
+def post_live_chat(
+    chat: BarazaLiveChatCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    db_chat = BarazaLiveChat(
+        message=chat.message,
+        user_id=current_user.id
+    )
+    db.add(db_chat)
+    db.commit()
+    db.refresh(db_chat)
+    db_chat.user_name = current_user.full_name
+    return db_chat
 
 # --- Civic IQ & Gamification ---
 @router.get("/quizzes", response_model=List[BarazaQuizOut])

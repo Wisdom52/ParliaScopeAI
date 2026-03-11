@@ -4,54 +4,127 @@ from sqlalchemy import select
 from app.models.speech import SpeechSegment
 from app.services.embedding import get_embedding
 
-def search_similar_segments(query: str, db: Session, limit: int = 5):
+def search_similar_segments(query: str, document_id: int, db: Session, limit: int = 5):
     """
-    Searches for the most similar speech segments to the query using pgvector (L2 distance).
+    Searches for the most similar speech segments to the query within a specific hansard_id
+    using pgvector (L2 distance).
     """
     query_embedding = get_embedding(query)
     
     # pgvector's l2_distance operator is <->
     # We want to order by distance ascending (closest first)
-    stmt = select(SpeechSegment).order_by(SpeechSegment.embedding.l2_distance(query_embedding)).limit(limit)
+    stmt = (
+        select(SpeechSegment)
+        .filter(SpeechSegment.hansard_id == document_id)
+        .order_by(SpeechSegment.embedding.l2_distance(query_embedding))
+        .limit(limit)
+    )
     results = db.execute(stmt).scalars().all()
     
     return results
 
-def generate_answer(query: str, db: Session):
+def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
     """
     RAG Pipeline:
-    1. Embed query & search DB.
+    1. Embed query & search DB (filtered by doc_type and document_id).
     2. Construct prompt with context.
     3. Call Ollama for answer.
     """
-    segments = search_similar_segments(query, db)
+    if doc_type == "hansard":
+        segments = search_similar_segments(query, document_id, db)
+
     
-    if not segments:
-        return {
-            "answer": "I couldn't find any relevant information in the parliamentary records to answer your question.",
-            "sources": []
-        }
+    if doc_type == "hansard":
+        if not segments:
+            from app.models.hansard import Hansard
+            hansard = db.query(Hansard).filter(Hansard.id == document_id).first()
+            if hansard and (hansard.title or hansard.ai_summary):
+                context_text = f"Hansard Title: {hansard.title}\nSummary: {hansard.ai_summary}\n\nThe detailed specific excerpts are not yet available for this document."
+                sources = [{
+                    "speaker": "Official Hansard Record",
+                    "preview": hansard.title,
+                    "id": hansard.id
+                }]
+                prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Hansard summary data.
+                
+                Context:
+                {context_text}
+                
+                Question: {query}
+                
+                Answer (be concise):"""
+            else:
+                return {
+                    "answer": "I couldn't find any relevant information in this parliamentary record to answer your question.",
+                    "sources": []
+                }
+        else:
+            # Construct Context
+            context_text = ""
+            sources = []
+            
+            for seg in segments:
+                context_text += f"Speaker: {seg.speaker_name}\nText: {seg.content}\n\n"
+                sources.append({
+                    "speaker": seg.speaker_name,
+                    "preview": seg.content[:100] + "...",
+                    "id": seg.id
+                })
+                
+            prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Hansard excerpts.
+            
+            Context:
+            {context_text}
+            
+            Question: {query}
+            
+            Answer (be concise and cite the speaker names):"""
+
+    elif doc_type == "bill":
+        from app.models.bill import Bill
         
-    # Construct Context
-    context_text = ""
-    sources = []
-    
-    for seg in segments:
-        context_text += f"Speaker: {seg.speaker_name}\nText: {seg.content}\n\n"
-        sources.append({
-            "speaker": seg.speaker_name,
-            "preview": seg.content[:100] + "...",
-            "id": seg.id
-        })
+        bill = db.query(Bill).filter(Bill.id == document_id).first()
+        if not bill:
+            return {
+                "answer": "I couldn't find this bill's context in the database.",
+                "sources": []
+            }
+            
+        impacts = bill.impacts
         
-    prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Hansard excerpts.
-    
-    Context:
-    {context_text}
-    
-    Question: {query}
-    
-    Answer (be concise and cite the speaker names):"""
+        if not bill.summary and not impacts:
+            return {
+                "answer": f"The detailed summary and impacts for the bill '{bill.title}' are still being processed. Please check back shortly.",
+                "sources": [{
+                    "speaker": "Official Bill Record",
+                    "preview": bill.title,
+                    "id": bill.id
+                }]
+            }
+            
+        context_text = f"Bill Title: {bill.title}\n"
+        if bill.summary:
+            context_text += f"Summary: {bill.summary}\n\n"
+        
+        if impacts:
+            context_text += "Impacts:\n"
+            for imp in impacts:
+                context_text += f"Archetype: {imp.archetype} ({imp.sentiment})\nDescription: {imp.description}\n\n"
+            
+        sources = [{
+            "speaker": "Official Bill Record",
+            "preview": bill.title,
+            "id": bill.id
+        }]
+        
+        prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Bill summary and impact data.
+        
+        Context:
+        {context_text}
+        
+        Question: {query}
+        
+        Answer (be concise and focus on the bill's provisions/impacts):"""
     
     # Call Ollama
     # Assumes 'llama3' is pulled, or falls back to 'mistral' or user default.
@@ -70,3 +143,4 @@ def generate_answer(query: str, db: Session):
         "answer": answer,
         "sources": sources
     }
+

@@ -66,6 +66,13 @@ interface FloatingReaction {
     left: number;
 }
 
+interface LiveChat {
+    id: number;
+    message: string;
+    user_name: string;
+    created_at: string;
+}
+
 type Section = 'meetings' | 'polls' | 'forum' | 'live' | 'game';
 
 interface BarazaProps {
@@ -85,6 +92,9 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
     // Live Stream States
     const [liveVid, setLiveVid] = useState('dQw4w9WgXcQ');
     const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+    const [liveChats, setLiveChats] = useState<LiveChat[]>([]);
+    const [newChat, setNewChat] = useState('');
+    const chatContainerRef = React.useRef<HTMLDivElement>(null);
 
     // Quiz States
     const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
@@ -118,6 +128,7 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                 } else {
                     setLiveVid(data.youtube_id);
                 }
+                fetchChats();
             } else if (activeSection === 'game') {
                 const res = await fetch(`http://localhost:8000/baraza/quizzes`);
                 const data = await res.json();
@@ -135,6 +146,31 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
             setLoading(false);
         }
     };
+
+    const fetchChats = async () => {
+        try {
+            const res = await fetch(`http://localhost:8000/baraza/live/chat`);
+            const data = await res.json();
+            setLiveChats(Array.isArray(data) ? data : []);
+            if (chatContainerRef.current) {
+                chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+            }
+        } catch (err) {
+            console.error("Chat fetch error", err);
+        }
+    };
+
+    useEffect(() => {
+        let interval: any;
+        if (activeSection === 'live') {
+            interval = setInterval(() => {
+                fetchChats();
+            }, 3000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [activeSection]);
 
     const fetchGamification = async () => {
         try {
@@ -199,6 +235,30 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
             });
         } catch (err) {
             console.error("Pulse error", err);
+        }
+    };
+
+    const handleSendChat = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newChat.trim() || !ensureLoggedIn()) return;
+        try {
+            const token = localStorage.getItem('parliaScope_token');
+            const res = await fetch(`http://localhost:8000/baraza/live/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ message: newChat })
+            });
+            if (res.ok) {
+                setNewChat('');
+                fetchChats();
+            } else {
+                alert("Failed to send chat.");
+            }
+        } catch (err) {
+            alert("Error sending chat.");
         }
     };
 
@@ -525,7 +585,7 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                         <iframe
                                             width="100%"
                                             height="100%"
-                                            src={`https://www.youtube.com/embed/${liveVid}${liveVid.includes('?') ? '&' : '?'}autoplay=1&mute=0`}
+                                            src={`https://www.youtube.com/embed/${liveVid}${liveVid.includes('?') ? '&' : '?'}autoplay=1&mute=1&playsinline=1`}
                                             title="YouTube video player"
                                             frameBorder="0"
                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -537,12 +597,33 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                                 <span key={r.id} className="floating-emoji" style={{ left: `${r.left}%` }}>{getEmoji(r.type)}</span>
                                             ))}
                                         </div>
+
+                                        <div className="live-chat-overlay" ref={chatContainerRef}>
+                                            {liveChats.map(c => (
+                                                <div key={c.id} className="chat-bubble">
+                                                    <span className="chat-author">{c.user_name}:</span>
+                                                    <span className="chat-msg">{c.message}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                     <div className="pulse-controls">
                                         {['fire', 'clap', 'love', 'angry', 'sad'].map(t => (
                                             <button key={t} onClick={() => handlePulse(t)}>{getEmoji(t)}</button>
                                         ))}
                                     </div>
+                                    <form className="chat-input-form" onSubmit={handleSendChat}>
+                                        <input
+                                            type="text"
+                                            placeholder="Join the conversation..."
+                                            value={newChat}
+                                            onChange={(e) => setNewChat(e.target.value)}
+                                            onFocus={(e) => {
+                                                if (!ensureLoggedIn()) e.target.blur();
+                                            }}
+                                        />
+                                        <button type="submit" disabled={!newChat.trim()}>Send</button>
+                                    </form>
                                 </div>
                             </div>
                         )}

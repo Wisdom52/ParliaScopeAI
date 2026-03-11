@@ -124,10 +124,12 @@ export const SearchScreen = () => {
         setChatInput('');
 
         try {
-            const response = await fetch(`${API_BASE_URL}/chat/hansard`, {
+            const docId = selectedDoc?.id;
+            const docType = activeCategory === 'bills' ? 'bill' : 'hansard';
+            const response = await fetch(`${API_BASE_URL}/chat/document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: userMsg.content }),
+                body: JSON.stringify({ query: userMsg.content, document_id: docId, doc_type: docType }),
             });
 
             const data = await response.json();

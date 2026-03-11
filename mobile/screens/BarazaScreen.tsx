@@ -12,7 +12,8 @@ import {
     Alert,
     Dimensions,
     Animated,
-    FlatList
+    FlatList,
+    Keyboard
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
@@ -81,6 +82,13 @@ interface FloatingReaction {
     left: number;
 }
 
+interface LiveChat {
+    id: number;
+    message: string;
+    user_name: string;
+    created_at: string;
+}
+
 interface BarazaProps {
     onSwitchToProfile: () => void;
     user: any;
@@ -98,6 +106,9 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
     // Live Stream States
     const [liveVid, setLiveVid] = useState('dQw4w9WgXcQ');
     const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+    const [liveChats, setLiveChats] = useState<LiveChat[]>([]);
+    const [newChat, setNewChat] = useState('');
+    const chatScrollRef = useRef<ScrollView>(null);
 
     // Quiz States
     const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
@@ -142,6 +153,7 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                 } else {
                     setLiveVid(data.youtube_id);
                 }
+                fetchChats();
             } else if (activeSection === 'game') {
                 const res = await fetch(`${API_BASE_URL}/baraza/quizzes`);
                 const data = await res.json();
@@ -160,6 +172,28 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
             setLoading(false);
         }
     };
+
+    const fetchChats = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/baraza/live/chat`);
+            const data = await res.json();
+            setLiveChats(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error("Chat fetch error", err);
+        }
+    };
+
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (activeSection === 'live') {
+            interval = setInterval(() => {
+                fetchChats();
+            }, 3000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [activeSection]);
 
     const fetchGamification = async () => {
         try {
@@ -235,6 +269,29 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
             });
         } catch (err) {
             console.error("Pulse error", err);
+        }
+    };
+
+    const handleSendChat = async () => {
+        if (!newChat.trim() || !ensureLoggedIn()) return;
+        try {
+            const token = await AsyncStorage.getItem('parliaScope_token');
+            const res = await fetch(`${API_BASE_URL}/baraza/live/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ message: newChat })
+            });
+            if (res.ok) {
+                setNewChat('');
+                fetchChats();
+            } else {
+                Alert.alert("Error", "Failed to send chat.");
+            }
+        } catch (err) {
+            Alert.alert("Error", "Network error while sending chat.");
         }
     };
 
@@ -571,7 +628,7 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                     allowsFullscreenVideo={true}
                     mediaPlaybackRequiresUserAction={false}
                     source={{
-                        uri: `https://www.youtube-nocookie.com/embed/${liveVid}${liveVid.includes('?') ? '&' : '?'}autoplay=1&mute=0&rel=0&origin=http://localhost`,
+                        uri: `https://www.youtube-nocookie.com/embed/${liveVid}${liveVid.includes('?') ? '&' : '?'}autoplay=1&mute=1&playsinline=1&rel=0&origin=http://localhost`,
                         headers: { 'Referer': 'http://localhost' }
                     }}
                 />
@@ -580,6 +637,22 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                         <AnimatedReaction key={r.id} emoji={getEmoji(r.type)} left={`${r.left}%`} />
                     ))}
                 </View>
+
+                <View style={styles.chatOverlayWrapper} pointerEvents="box-none">
+                    <ScrollView
+                        style={styles.liveChatOverlay}
+                        ref={chatScrollRef}
+                        onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {liveChats.map(c => (
+                            <View key={c.id} style={styles.chatBubble}>
+                                <Text style={styles.chatAuthor}>{c.user_name}:</Text>
+                                <Text style={styles.chatMsg}>{c.message}</Text>
+                            </View>
+                        ))}
+                    </ScrollView>
+                </View>
             </View>
             <View style={styles.pulseControls}>
                 {['fire', 'clap', 'love', 'angry', 'sad'].map(t => (
@@ -587,6 +660,27 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                         <Text style={styles.pulseBtnText}>{getEmoji(t)}</Text>
                     </TouchableOpacity>
                 ))}
+            </View>
+            <View style={styles.chatInputContainer}>
+                <TextInput
+                    style={styles.chatInput}
+                    placeholder="Join the conversation..."
+                    placeholderTextColor="rgba(255,255,255,0.6)"
+                    value={newChat}
+                    onChangeText={setNewChat}
+                    onFocus={() => {
+                        if (!ensureLoggedIn()) {
+                            Keyboard.dismiss();
+                        }
+                    }}
+                />
+                <TouchableOpacity
+                    style={[styles.sendBtn, !newChat.trim() ? styles.sendBtnDisabled : null]}
+                    onPress={handleSendChat}
+                    disabled={!newChat.trim()}
+                >
+                    <Text style={styles.sendBtnText}>Send</Text>
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -942,6 +1036,18 @@ const styles = StyleSheet.create({
     typeBtn: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 10, backgroundColor: '#f0f0f5', borderWidth: 1, borderColor: '#e0e0e0' },
     typeBtnSelected: { backgroundColor: '#e6f3ff', borderColor: '#007AFF' },
     typeBtnText: { fontSize: 12, fontWeight: '600', color: '#666' },
+
+    // Chat Overlay Styles
+    chatOverlayWrapper: { position: 'absolute', bottom: 10, left: 10, width: '75%', height: '45%' },
+    liveChatOverlay: { flex: 1 },
+    chatBubble: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 6, alignSelf: 'flex-start', flexWrap: 'wrap', flexDirection: 'row', alignItems: 'center' },
+    chatAuthor: { fontWeight: '700', color: '#e0e7ff', fontSize: 13, marginRight: 4 },
+    chatMsg: { color: '#fff', fontSize: 13 },
+    chatInputContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
+    chatInput: { flex: 1, backgroundColor: '#F2F2F7', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: '#000' },
+    sendBtn: { backgroundColor: '#007AFF', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 20 },
+    sendBtnDisabled: { opacity: 0.5 },
+    sendBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
     typeBtnTextSelected: { color: '#007AFF' },
     pollOptionInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     removeBtn: { marginBottom: 15 },

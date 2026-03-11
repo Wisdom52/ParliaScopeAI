@@ -9,6 +9,8 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 class ChatRequest(BaseModel):
     query: str
+    document_id: int
+    doc_type: str = "hansard" # "hansard" or "bill"
 
 class Source(BaseModel):
     speaker: str
@@ -19,11 +21,11 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[Source]
 
-@router.post("/hansard", response_model=ChatResponse)
-def chat_hansard(request: ChatRequest, db: Session = Depends(get_db)):
+@router.post("/document", response_model=ChatResponse)
+def chat_document(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # result is a dict {"answer": str, "sources": list}
-        result = generate_answer(request.query, db)
+        result = generate_answer(request.query, request.document_id, request.doc_type, db)
         return result
     except Exception as e:
         print(f"Chat Error: {e}")

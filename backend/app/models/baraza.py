@@ -88,6 +88,16 @@ class BarazaLivePulse(Base):
 
     user = relationship("User")
 
+class BarazaLiveChat(Base):
+    __tablename__ = "baraza_live_chats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message = Column(Text, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+
 class BarazaQuiz(Base):
     __tablename__ = "baraza_quizzes"
 

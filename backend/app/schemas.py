@@ -278,6 +278,19 @@ class BarazaLivePulseOut(BaseModel):
     class Config:
         from_attributes = True
 
+class BarazaLiveChatCreate(BaseModel):
+    message: str
+
+class BarazaLiveChatOut(BaseModel):
+    id: int
+    message: str
+    user_id: int
+    user_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 # --- Civic IQ & Gamification ---
 class BarazaQuestionOut(BaseModel):
     id: int
