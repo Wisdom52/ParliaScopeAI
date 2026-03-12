@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Calendar, User, Users, MessageSquare } from 'lucide-react';
+import { FileText, Calendar, User, Users, MessageSquare, Shield } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Onboarding } from './pages/Onboarding';
 import { ProfilePage } from './pages/ProfilePage';
@@ -7,15 +7,17 @@ import { SearchPage } from './pages/SearchPage';
 import { DailyPage } from './pages/DailyPage';
 import { RepresentativesPage } from './pages/RepresentativesPage';
 import { BarazaPage } from './pages/BarazaPage';
+import { AdminPage } from './pages/AdminPage';
 import './App.css';
 
-type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza';
+type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza' | 'admin';
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'daily', label: 'Daily', icon: <Calendar size={18} /> },
   { id: 'docs', label: 'Docs', icon: <FileText size={18} /> },
   { id: 'baraza', label: 'Baraza', icon: <MessageSquare size={18} /> },
   { id: 'representative', label: 'Leaders', icon: <Users size={18} /> },
+  { id: 'admin', label: 'Admin', icon: <Shield size={18} />, adminOnly: true },
   { id: 'profile', label: 'Profile', icon: <User size={18} /> },
 ];
 
@@ -43,7 +45,7 @@ function AppContent() {
       <nav className="tab-bar">
         <div className="tab-bar-brand">ParliaScope</div>
         <div className="tab-bar-tabs">
-          {TABS.map(tab => (
+          {TABS.filter(tab => !tab.adminOnly || user?.is_admin).map(tab => (
             <button
               key={tab.id}
               className={`tab-button ${activeTab === tab.id ? 'tab-active' : ''}`}
@@ -62,6 +64,7 @@ function AppContent() {
         {activeTab === 'docs' && <SearchPage />}
         {activeTab === 'baraza' && <BarazaPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={() => setActiveTab('profile')} />}
+        {activeTab === 'admin' && user?.is_admin && <AdminPage />}
         {activeTab === 'profile' && (
           user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => setActiveTab('profile')} />
         )}

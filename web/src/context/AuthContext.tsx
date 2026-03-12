@@ -11,6 +11,7 @@ interface User {
     constituency_name?: string;
     whatsapp_number?: string | null;
     push_token?: string | null;
+    is_admin: boolean;
 }
 
 interface AuthContextType {

@@ -1,0 +1,151 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import List
+import os
+
+from app.database import get_db
+from app.models.user import User
+from app.models.system import AdminNotification
+from app.schemas import User as UserRead
+from app.routes.auth import get_current_admin_user
+from app.core.logger import logger
+from app.routes.ingest import perform_hansard_crawl
+
+router = APIRouter(prefix="/admin", tags=["Admin"])
+
+@router.get("/users", response_model=List[UserRead])
+def list_users(
+    db: Session = Depends(get_db), 
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    List all registered citizens.
+    """
+    logger.info(f"Admin {admin.email} requested user list.")
+    return db.query(User).all()
+
+@router.get("/logs")
+def get_logs(
+    lines: int = Query(100, ge=1, le=1000),
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Fetch the latest lines from the application log file.
+    """
+    log_path = "logs/parliascope.log"
+    if not os.path.exists(log_path):
+        return {"logs": "Log file not found."}
+    
+    try:
+        with open(log_path, "r") as f:
+            # Simple tail implementation
+            content = f.readlines()
+            last_lines = content[-lines:] if len(content) > lines else content
+            return {"logs": "".join(last_lines)}
+    except Exception as e:
+        logger.error(f"Failed to read logs for admin: {e}")
+        raise HTTPException(status_code=500, detail="Could not read log file.")
+
+@router.post("/ingest/hansard")
+async def trigger_hansard_ingest(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Manually trigger the Hansard ingestion crawler.
+    """
+    logger.info(f"Admin {admin.email} manually triggered Hansard ingestion.")
+    try:
+        # Note: In a production app, this should be a background task.
+        # But for this system, we can invoke it and return status.
+        stats = await perform_hansard_crawl(db)
+        return {"status": "success", "summary": stats}
+    except Exception as e:
+        logger.error(f"Manual ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/users/{user_id}/role")
+def update_user_role(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Toggle a user's admin (is_admin) status.
+    """
+    if admin.id == user_id:
+        raise HTTPException(status_code=400, detail="Admins cannot demote themselves.")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    user.is_admin = not user.is_admin
+    db.commit()
+    logger.info(f"Admin {admin.email} toggled role for user {user.email} to is_admin={user.is_admin}")
+    return {"status": "success", "is_admin": user.is_admin}
+
+@router.patch("/users/{user_id}/status")
+def toggle_user_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Toggle a user's active (is_active) status.
+    """
+    if admin.id == user_id:
+        raise HTTPException(status_code=400, detail="Admins cannot pause themselves.")
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    user.is_active = not user.is_active
+    db.commit()
+    logger.info(f"Admin {admin.email} toggled status for user {user.email} to is_active={user.is_active}")
+    return {"status": "success", "is_active": user.is_active}
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Permanently delete a user account.
+    """
+    if admin.id == user_id:
+        raise HTTPException(status_code=400, detail="Admins cannot delete themselves.")
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    email = user.email
+    db.delete(user)
+    db.commit()
+    logger.warning(f"Admin {admin.email} PERMANENTLY DELETED user account: {email}")
+    return {"status": "success", "message": f"User {email} deleted successfully."}
+
+@router.get("/notifications")
+def get_notifications(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Fetch recent system notifications for administrators."""
+    return db.query(AdminNotification).order_by(AdminNotification.created_at.desc()).limit(100).all()
+
+@router.patch("/notifications/{notif_id}/read")
+def mark_notification_read(
+    notif_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Mark a notification as read."""
+    notif = db.query(AdminNotification).filter(AdminNotification.id == notif_id).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    notif.is_read = True
+    db.commit()
+    return {"status": "success"}

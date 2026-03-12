@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
 from app.services.rag import generate_answer
-from typing import List
+from app.routes.auth import get_current_user_optional
+from app.models.user import User
+from app.core.logger import logger
+from app.core.security_utils import rate_limit
+from typing import List, Optional
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -22,8 +26,17 @@ class ChatResponse(BaseModel):
     sources: List[Source]
 
 @router.post("/document", response_model=ChatResponse)
-def chat_document(request: ChatRequest, db: Session = Depends(get_db)):
+@rate_limit(requests_per_minute=5)
+def chat_document(
+    request: ChatRequest, 
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+    raw_request: Request = None  # Needed for rate_limit decorator
+):
     try:
+        user_identity = user.email if user else "Guest (Anonymous)"
+        logger.info(f"Forensic Audit: User {user_identity} queried document {request.document_id} ({request.doc_type}) with query: '{request.query}'")
+        
         # result is a dict {"answer": str, "sources": list}
         result = generate_answer(request.query, request.document_id, request.doc_type, db)
         return result

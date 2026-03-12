@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select, or_
 from app.database import get_db
@@ -8,18 +8,32 @@ from app.schemas import FactShieldRequest, FactShieldResponse, FactShieldSource
 from app.services.embedding import get_embedding
 import ollama
 from typing import List, Optional
+from app.core.logger import logger
+from app.core.security_utils import rate_limit
+from app.routes.auth import get_current_user_optional
+from app.models.user import User
 
 router = APIRouter(prefix="/fact-shield", tags=["Fact-Shield"])
 
 @router.post("/verify", response_model=FactShieldResponse)
-async def verify_claim(req: FactShieldRequest, db: Session = Depends(get_db)):
+@rate_limit(requests_per_minute=3)
+async def verify_claim(
+    req: FactShieldRequest, 
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+    raw_request: Request = None # Needed for rate_limit
+):
     query = req.claim_text or ""
     if req.url and not query:
         # If only URL is provided, we use it as a keyword hint for now
         query = req.url 
 
     if not query:
+        logger.warning("Fact-Shield verification blocked: missing claim text or URL.")
         raise HTTPException(status_code=400, detail="Either claim_text or url must be provided.")
+
+    user_identity = user.email if user else "Guest (Anonymous)"
+    logger.info(f"Forensic Audit: User {user_identity} requested Fact-Shield verification for claim: '{query}'")
 
     # 1. Search for context (RAG)
     # Search Hansards (Speeches)
@@ -71,10 +85,15 @@ async def verify_claim(req: FactShieldRequest, db: Session = Depends(get_db)):
     {context_text}
     
     INSTRUCTIONS:
-    - Compare the claim with the records.
+    - Compare the claim strictly with the records. Do NOT add information from outside these records.
+    - If the official records do not contain sufficient evidence to judge the claim, you MUST output [Inconclusive] and explicitly state why.
     - Assign a status: 'Verified' (if records confirm it), 'Unverified' (if records contradict it), 'Mixed' (if partially true/false), or 'Inconclusive' (if not enough info).
     - Provide a clear, neutral analysis explaining WHY you gave that status, citing specific speakers or bill titles from the context.
-    - Keep your response under 1000 characters.
+    - At the end, you MUST output your confidence in your verdict as: [Confidence: 0-100], where:
+      * 85-100 = strong direct evidence in the records
+      * 50-84 = some relevant evidence but incomplete
+      * 0-49 = very little evidence; result is uncertain
+    - Keep your full response under 1200 characters.
     - Output MUST lead with the Status in brackets like [Verified] or [Unverified].
     """
 
@@ -91,12 +110,27 @@ async def verify_claim(req: FactShieldRequest, db: Session = Depends(get_db)):
         elif "[Mixed]" in analysis: status_word = "Mixed"
         elif "[Inconclusive]" in analysis: status_word = "Inconclusive"
 
+        # Extract confidence score
+        import re
+        confidence_score = None
+        confidence_match = re.search(r'\[Confidence:\s*(\d+)\]', analysis)
+        if confidence_match:
+            raw = int(confidence_match.group(1))
+            confidence_score = max(0, min(100, raw))  # clamp to 0-100
+
+        # Clean up analysis text by removing parsed tokens
+        clean_analysis = re.sub(r'\[Confidence:\s*\d+\]', '', analysis)
+        clean_analysis = clean_analysis.replace(f"[{status_word}]", "").strip()
+
+        logger.info(f"Fact-Shield verification completed. Result: [{status_word}] Confidence: {confidence_score}%")
         return FactShieldResponse(
             status=status_word,
-            analysis=analysis.replace(f"[{status_word}]", "").strip(),
+            analysis=clean_analysis,
+            confidence_score=confidence_score,
             sources=sources
         )
     except Exception as e:
+        logger.error(f"Error in Fact-Shield verification: {str(e)}", exc_info=True)
         return FactShieldResponse(
             status="Inconclusive",
             analysis=f"The AI verification engine encountered an error: {str(e)}",

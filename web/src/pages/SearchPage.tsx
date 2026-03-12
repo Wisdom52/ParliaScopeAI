@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import { Loader2, FileText, Activity, Send, MessageSquare, Search, X, Shield } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface Hansard {
     id: number;
@@ -34,10 +35,12 @@ interface FactShieldSource {
 interface FactShieldResult {
     status: string;
     analysis: string;
+    confidence_score?: number;
     sources: FactShieldSource[];
 }
 
 export const SearchPage: React.FC = () => {
+    const { token } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [documents, setDocuments] = useState<Hansard[]>([]);
     const [docsLoading, setDocsLoading] = useState(false);
@@ -132,7 +135,10 @@ export const SearchPage: React.FC = () => {
             const docType = activeCategory === 'bills' ? 'bill' : 'hansard';
             const response = await fetch('http://localhost:8000/chat/document', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({ query: userMsg.content, document_id: docId, doc_type: docType }),
             });
 
@@ -162,7 +168,10 @@ export const SearchPage: React.FC = () => {
             const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
             const response = await fetch(`${apiBase}/fact-shield/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({ url: factUrl, claim_text: factClaim }),
             });
             if (response.ok) {
@@ -409,7 +418,20 @@ export const SearchPage: React.FC = () => {
                                     <h4 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>AI Verification Analysis</h4>
                                 </div>
 
-                                <p style={{ fontSize: '1rem', lineHeight: '1.6', color: '#334155', marginBottom: '2rem' }}>{factResult.analysis}</p>
+                                <p style={{ fontSize: '1rem', lineHeight: '1.6', color: '#334155', marginBottom: '1.5rem' }}>{factResult.analysis}</p>
+
+                                {/* Confidence Score */}
+                                {factResult.confidence_score !== undefined && factResult.confidence_score !== null && (
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>AI Confidence</span>
+                                            <span style={{ fontSize: '0.8rem', fontWeight: '800', color: factResult.confidence_score >= 75 ? '#166534' : factResult.confidence_score >= 50 ? '#854D0E' : '#991B1B' }}>{factResult.confidence_score}%</span>
+                                        </div>
+                                        <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${factResult.confidence_score}%`, background: factResult.confidence_score >= 75 ? '#22c55e' : factResult.confidence_score >= 50 ? '#f59e0b' : '#ef4444', borderRadius: '3px', transition: 'width 0.5s ease' }} />
+                                        </div>
+                                    </div>
+                                )}
 
                                 {factResult.sources && factResult.sources.length > 0 && (
                                     <div>
@@ -418,12 +440,20 @@ export const SearchPage: React.FC = () => {
                                             {factResult.sources.map(source => (
                                                 <div key={source.id} style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                                     <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--primary)', marginBottom: '0.3rem' }}>{source.title}</div>
-                                                    <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0, fontStyle: 'italic' }}>"{source.preview}"</p>
+                                                    <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0, fontStyle: 'italic' }}>'{source.preview}'</p>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                 )}
+
+                                {/* AI Watermark Disclaimer */}
+                                <div style={{ marginTop: '1.5rem', padding: '0.75rem 1rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                    <span style={{ fontSize: '1rem' }}>⚠️</span>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#92400e', lineHeight: '1.5' }}>
+                                        <strong>AI Interpretation Only.</strong> This analysis is generated by an AI based on indexed official records and is not legal advice. Results may be incomplete if relevant records have not yet been indexed. Always verify critical claims against the original official source documents.
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -541,6 +571,11 @@ export const SearchPage: React.FC = () => {
                                                                     "{s.preview}" — {s.speaker}
                                                                 </div>
                                                             ))}
+                                                        </div>
+                                                    )}
+                                                    {msg.role === 'assistant' && (
+                                                        <div style={{ marginTop: '0.35rem', fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                                            🤖 AI interpretation based on official parliamentary records. Not legal advice.
                                                         </div>
                                                     )}
                                                 </div>

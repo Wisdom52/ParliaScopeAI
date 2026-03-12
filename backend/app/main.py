@@ -2,8 +2,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
+import time
 
-from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives, representatives_stance, baraza, fact_shield
+from app.core.logger import logger
+from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives, representatives_stance, baraza, fact_shield, admin
 from app.routes.ingest import perform_hansard_crawl
 from app.database import SessionLocal, engine, Base
 import app.models # Trigger models registration
@@ -17,9 +19,7 @@ app = FastAPI(title="ParliaScope API")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    with open("error_log.txt", "a") as f:
-        f.write(f"\n--- Exception at {request.url} ---\n")
-        f.write(traceback.format_exc())
+    logger.error(f"Exception at {request.url}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error", "error": str(exc)},
@@ -38,6 +38,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def audit_log_middleware(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    
+    # Audit log format: [IP] Method Path - Status (Time ms)
+    client_ip = request.client.host if request.client else "Unknown"
+    logger.info(f"Audit: {client_ip} {request.method} {request.url.path} - {response.status_code} ({process_time:.3f}s)")
+    
+    return response
+
 app.include_router(auth.router)
 app.include_router(ingest.router)
 app.include_router(chat.router)
@@ -51,6 +63,7 @@ app.include_router(representatives.router)
 app.include_router(representatives_stance.router)
 app.include_router(baraza.router)
 app.include_router(fact_shield.router)
+app.include_router(admin.router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -26,6 +26,8 @@ class User(Base):
     # Notification preferences
     whatsapp_number = Column(String, nullable=True)
     push_token = Column(String, nullable=True)
+    is_admin = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
 
     county = relationship("County")
     constituency = relationship("Constituency")

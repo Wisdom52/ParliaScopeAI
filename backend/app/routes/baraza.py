@@ -20,7 +20,9 @@ from app.schemas import (
     BarazaQuizOut, BarazaGamificationStatus
 )
 from app.routes.auth import get_current_user
-from datetime import datetime
+from app.core.moderation import check_profanity, is_spam
+from app.core.security_utils import get_notification_trigger
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/baraza", tags=["Digital Baraza"])
 
@@ -262,6 +264,28 @@ def post_live_chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # 1. Profanity Filter
+    if check_profanity(chat.message):
+        get_notification_trigger(
+            db, "Security", 
+            f"User {current_user.email} attempted to post profanity in Live Chat: {chat.message[:50]}...",
+            "Medium"
+        )
+        raise HTTPException(status_code=400, detail="Inappropriate content detected.")
+
+    # 2. Spam & Cooldown
+    last_chats = db.query(BarazaLiveChat).filter(
+        BarazaLiveChat.user_id == current_user.id
+    ).order_by(BarazaLiveChat.created_at.desc()).limit(5).all()
+    
+    last_messages = [c.message for c in last_chats]
+    if is_spam(chat.message, last_messages):
+        raise HTTPException(status_code=400, detail="Spam detected. Please wait.")
+        
+    # Cooldown check (3 seconds)
+    if last_chats and last_chats[0].created_at > datetime.utcnow() - timedelta(seconds=3):
+        raise HTTPException(status_code=429, detail="Slow down! You're chatting too fast.")
+
     db_chat = BarazaLiveChat(
         message=chat.message,
         user_id=current_user.id

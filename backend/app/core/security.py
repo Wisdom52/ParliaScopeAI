@@ -26,3 +26,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+# --- PII Pseudonymisation ---
+
+def hash_id_number(id_number: str) -> str:
+    """
+    One-way hash a National ID number using pbkdf2_sha256 before storage.
+    This means the raw ID number is never stored in plain text in the database.
+    """
+    return pwd_context.hash(id_number)
+
+def verify_id_number(plain_id: str, hashed_id: str) -> bool:
+    """
+    Verify a National ID number against its stored hash.
+    Useful for future identity verification flows without storing the raw number.
+    """
+    return pwd_context.verify(plain_id, hashed_id)

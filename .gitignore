@@ -172,6 +172,9 @@ web-build/
 *.keystore
 
 # Project specific ignores
+backend/parliascope.db
+*.db
+*.sqlite
 Docs/
 docs/
 DOCS/
@@ -186,6 +189,7 @@ backend/scripts/test_impact.py
 *.log
 backend/*.html
 tmp/
+.gemini/
 
 # OS specific files
 .DS_Store

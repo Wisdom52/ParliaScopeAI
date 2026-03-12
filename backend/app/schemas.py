@@ -37,11 +37,12 @@ class User(UserBase):
     constituency_id: Optional[int]
     county_name: Optional[str] = None
     constituency_name: Optional[str] = None
-    constituency_name: Optional[str] = None
     latitude: Optional[float]
     longitude: Optional[float]
     whatsapp_number: Optional[str] = None
     push_token: Optional[str] = None
+    is_admin: bool = False
+    is_active: bool = True
 
     class Config:
         from_attributes = True
@@ -346,6 +347,7 @@ class FactShieldResponse(BaseModel):
     status: str # 'Verified', 'Unverified', 'Mixed', 'Inconclusive'
     analysis: str
     explanation: Optional[str] = None
+    confidence_score: Optional[int] = None  # 0-100, AI self-reported confidence
     sources: List[FactShieldSource] = []
 # --- Stance Analysis ---
 class StanceRecord(BaseModel):

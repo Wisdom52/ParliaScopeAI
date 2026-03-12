@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.models.speech import SpeechSegment
 from app.services.embedding import get_embedding
+from app.core.logger import logger
+from app.core.moderation import sanitize_for_prompt
+from app.core.security_utils import get_notification_trigger
 
 def search_similar_segments(query: str, document_id: int, db: Session, limit: int = 5):
     """
@@ -20,7 +23,7 @@ def search_similar_segments(query: str, document_id: int, db: Session, limit: in
         .limit(limit)
     )
     results = db.execute(stmt).scalars().all()
-    
+    logger.info(f"Found {len(results)} similar segments for query: '{query}'")
     return results
 
 def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
@@ -30,7 +33,19 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
     2. Construct prompt with context.
     3. Call Ollama for answer.
     """
+    # 0. Prompt Injection Check
+    sanitized_query = sanitize_for_prompt(query)
+    if "[REDACTED ADVERSARIAL ATTEMPT]" in sanitized_query:
+        get_notification_trigger(
+            db, "Security", 
+            f"Adversarial Prompt Injection attempt detected in query: {query[:100]}...",
+            "High"
+        )
+        # We'll allow the sanitized version to proceed but AI will likely refuse
+        query = sanitized_query
+
     if doc_type == "hansard":
+        logger.info(f"Starting RAG generation for Hansard ID {document_id}")
         segments = search_similar_segments(query, document_id, db)
 
     
@@ -46,6 +61,8 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
                     "id": hansard.id
                 }]
                 prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Hansard summary data.
+                Do NOT invent or add information not present in the context below.
+                If the context does not contain enough information to answer the question confidently, explicitly say: "I don't have enough verified data in the parliamentary records to answer this accurately."
                 
                 Context:
                 {context_text}
@@ -72,6 +89,8 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
                 })
                 
             prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Hansard excerpts.
+            Do NOT invent or add information not present in the context below.
+            If the context does not contain enough information to answer the question confidently, explicitly say: "I don't have enough verified data in the parliamentary records to answer this accurately."
             
             Context:
             {context_text}
@@ -81,6 +100,7 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
             Answer (be concise and cite the speaker names):"""
 
     elif doc_type == "bill":
+        logger.info(f"Starting RAG generation for Bill ID {document_id}")
         from app.models.bill import Bill
         
         bill = db.query(Bill).filter(Bill.id == document_id).first()
@@ -118,6 +138,8 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
         }]
         
         prompt = f"""You are an AI assistant for the Kenyan Parliament. Answer the user's question based ONLY on the following Bill summary and impact data.
+        Do NOT invent or add information not present in the context below.
+        If the context does not contain enough information to answer the question confidently, explicitly say: "I don't have enough verified data in the parliamentary records to answer this accurately."
         
         Context:
         {context_text}
@@ -135,8 +157,10 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
             {'role': 'user', 'content': prompt},
         ])
         answer = response['message']['content']
+        logger.info("Successfully generated AI answer via Ollama.")
     except Exception as e:
         # Fallback handling or specific error message
+        logger.error(f"Error communicating with Ollama in generate_answer: {str(e)}", exc_info=True)
         answer = f"Error communicating with Ollama: {str(e)}. Please ensure 'llama3.2:3b' model is pulled (ollama pull llama3.2:3b)."
 
     return {
