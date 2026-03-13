@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Vote, MessageSquare, Calendar, ExternalLink, Plus, PlayCircle, Trophy, Brain, CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
+import { Users, Vote, MessageSquare, Calendar, ExternalLink, Plus, PlayCircle, Brain, CheckCircle2, XCircle, Pencil, Trash2, Sprout, Star, Flame, Layout, Award } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './BarazaPage.css';
 
@@ -43,6 +43,8 @@ interface Quiz {
     description: string;
     icon?: string;
     points_reward: number;
+    difficulty: string;   // beginner | intermediate | advanced
+    source_type: string;  // manual | ai_generated
     questions: Question[];
 }
 
@@ -99,7 +101,9 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
     // Quiz States
     const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
     const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
-    const [quizResult, setQuizResult] = useState<{ correct: number, total: number, reward: number } | null>(null);
+    const [quizResult, setQuizResult] = useState<{ correct: number, total: number, reward: number, new_badges?: string[] } | null>(null);
+    const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
+    const [generatingQuizzes, setGeneratingQuizzes] = useState(false);
 
     // Modal & Form states
     const [showModal, setShowModal] = useState(false);
@@ -114,8 +118,8 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
 
     useEffect(() => {
         fetchData();
-        if (activeSection === 'game') fetchGamification();
-    }, [activeSection]);
+        if (activeSection === 'game' && user) fetchGamification();
+    }, [activeSection, user, difficultyFilter]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -130,7 +134,10 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                 }
                 fetchChats();
             } else if (activeSection === 'game') {
-                const res = await fetch(`http://localhost:8000/baraza/quizzes`);
+                const url = difficultyFilter !== 'all'
+                    ? `http://localhost:8000/baraza/quizzes?difficulty=${difficultyFilter}`
+                    : `http://localhost:8000/baraza/quizzes`;
+                const res = await fetch(url);
                 const data = await res.json();
                 setQuizzes(Array.isArray(data) ? data : []);
             } else {
@@ -178,8 +185,12 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
             const res = await fetch(`http://localhost:8000/baraza/user/gamification`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            if (!res.ok) return; // Don't crash if unauthenticated
             const data = await res.json();
-            setUserStats({ points: data.prosperity_points, badges: data.badges });
+            setUserStats({
+                points: data.prosperity_points ?? 0,
+                badges: Array.isArray(data.badges) ? data.badges : []
+            });
         } catch (err) {
             console.error("Gamification error", err);
         }
@@ -262,6 +273,18 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
         }
     };
 
+    const handleRefreshQuizzes = async () => {
+        setGeneratingQuizzes(true);
+        try {
+            await fetch(`http://localhost:8000/baraza/quizzes/generate-daily`);
+            fetchData();
+        } catch (err) {
+            console.error("Failed to generate quizzes", err);
+        } finally {
+            setGeneratingQuizzes(false);
+        }
+    };
+
     const submitQuiz = async () => {
         if (!currentQuiz) return;
         if (!ensureLoggedIn()) {
@@ -279,7 +302,7 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                 body: JSON.stringify(quizAnswers)
             });
             const data = await res.json();
-            setQuizResult({ correct: data.correct, total: data.total, reward: data.points_awarded });
+            setQuizResult({ correct: data.correct, total: data.total, reward: data.points_awarded, new_badges: data.new_badges });
             fetchGamification();
         } catch (err) {
             alert("Failed to submit quiz.");
@@ -639,7 +662,7 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                         <div className="badges-list">
                                             {userStats.badges.map(b => (
                                                 <div key={b.id} className="badge-icon" title={b.description}>
-                                                    <Trophy size={20} />
+                                                    <span style={{ fontSize: '1.2rem' }}>{b.icon_url || <Award size={20} color="gold" />}</span>
                                                 </div>
                                             ))}
                                             {userStats.badges.length === 0 && <p className="no-badges">Earn your first badge!</p>}
@@ -651,10 +674,45 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                     </div>
                                 </div>
 
+                                {/* Difficulty Filter & Refresh */}
+                                <div className="quiz-controls">
+                                    <div className="difficulty-tabs">
+                                        {['all', 'beginner', 'intermediate', 'advanced'].map(d => (
+                                            <button
+                                                key={d}
+                                                className={`diff-tab ${difficultyFilter === d ? 'active' : ''} diff-${d}`}
+                                                onClick={() => { setDifficultyFilter(d); }}
+                                            >
+                                                {d === 'beginner' ? <Sprout size={16} /> : d === 'intermediate' ? <Star size={16} /> : d === 'advanced' ? <Flame size={16} /> : <Layout size={16} />}
+                                                &nbsp;{d.charAt(0).toUpperCase() + d.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        className="refresh-quiz-btn"
+                                        onClick={handleRefreshQuizzes}
+                                        disabled={generatingQuizzes}
+                                        title="Generate fresh AI quizzes"
+                                    >
+                                        {generatingQuizzes ? '⏳ Generating...' : '🤖 AI Refresh'}
+                                    </button>
+                                </div>
+
                                 <div className="grid-list">
                                     {quizzes.length > 0 ? quizzes.map(q => (
                                         <div key={q.id} className="quiz-card" onClick={() => ensureLoggedIn() && (setCurrentQuiz(q), setQuizAnswers([]), setQuizResult(null))}>
-                                            <div className="quiz-icon"><Brain size={24} /></div>
+                                            <div className="quiz-card-header">
+                                                <div className="quiz-icon"><Brain size={24} /></div>
+                                                <div className="quiz-tags">
+                                                    <span className={`diff-pill diff-${q.difficulty}`}>
+                                                        {q.difficulty === 'beginner' ? <Sprout size={12} /> : q.difficulty === 'intermediate' ? <Star size={12} /> : <Flame size={12} />}
+                                                        &nbsp;{q.difficulty}
+                                                    </span>
+                                                    {q.source_type === 'ai_generated' && (
+                                                        <span className="ai-pill">🤖 AI</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                             <h4>{q.title}</h4>
                                             <p>{q.description}</p>
                                             <div className="quiz-footer">
@@ -662,7 +720,7 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                                 <span className="reward">+{q.points_reward} Points</span>
                                             </div>
                                         </div>
-                                    )) : <p className="empty-msg">New challenges coming soon!</p>}
+                                    )) : <p className="empty-msg">No quizzes yet — click 🤖 AI Refresh to generate today's challenges!</p>}
                                 </div>
                             </div>
                         )}
@@ -677,7 +735,18 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                         {!quizResult ? (
                             <>
                                 <div className="modal-header">
-                                    <h3>{currentQuiz.title}</h3>
+                                    <div>
+                                        <h3>{currentQuiz.title}</h3>
+                                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                                            <span className={`diff-pill diff-${currentQuiz.difficulty}`}>
+                                                {currentQuiz.difficulty === 'beginner' ? '🌱' : currentQuiz.difficulty === 'intermediate' ? '⭐' : '🔥'}
+                                                &nbsp;{currentQuiz.difficulty}
+                                            </span>
+                                            {currentQuiz.source_type === 'ai_generated' && (
+                                                <span className="ai-pill">🤖 AI Generated</span>
+                                            )}
+                                        </div>
+                                    </div>
                                     <button className="close-btn" onClick={() => setCurrentQuiz(null)}>✕</button>
                                 </div>
                                 <div className="quiz-body">
@@ -719,6 +788,12 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                 <h3>{quizResult.reward > 0 ? 'Excellent!' : 'Try Again!'}</h3>
                                 <p>You got {quizResult.correct} out of {quizResult.total} correct.</p>
                                 {quizResult.reward > 0 && <p className="reward-text">+{quizResult.reward} Prosperity Points Earned!</p>}
+                                {quizResult.new_badges && quizResult.new_badges.length > 0 && (
+                                    <div className="new-badges-row">
+                                        <p style={{ fontWeight: 700, marginBottom: '4px' }}>🎖️ New Badge{quizResult.new_badges.length > 1 ? 's' : ''} Unlocked!</p>
+                                        {quizResult.new_badges.map(b => <span key={b} className="new-badge-pill">{b}</span>)}
+                                    </div>
+                                )}
                                 <button className="submit-btn" onClick={() => setCurrentQuiz(null)}>Close</button>
                             </div>
                         )}

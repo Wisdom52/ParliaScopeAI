@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
 
+import { useAuth } from '../context/AuthContext';
+
 interface Source {
     id: number;
     speaker: string;
@@ -13,13 +15,28 @@ interface Message {
     sources?: Source[];
 }
 
-export const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+    onSwitchToProfile?: () => void;
+    documentId?: number;
+    docType?: 'hansard' | 'bill';
+}
+
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSwitchToProfile, documentId, docType = 'hansard' }) => {
+    const { user, token } = useAuth();
     const [query, setQuery] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(false);
 
+    const ensureLoggedIn = () => {
+        if (!user) {
+            if (onSwitchToProfile) onSwitchToProfile();
+            return false;
+        }
+        return true;
+    };
+
     const handleSend = async () => {
-        if (!query.trim()) return;
+        if (!query.trim() || !ensureLoggedIn()) return;
 
         const userMsg: Message = { role: 'user', content: query };
         setMessages(prev => [...prev, userMsg]);
@@ -27,10 +44,17 @@ export const ChatInterface: React.FC = () => {
         setQuery('');
 
         try {
-            const response = await fetch('http://localhost:8000/chat/hansard', {
+            const response = await fetch('http://localhost:8000/chat/document', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: userMsg.content }),
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ 
+                    query: userMsg.content,
+                    document_id: documentId,
+                    doc_type: docType
+                }),
             });
 
             const data = await response.json();

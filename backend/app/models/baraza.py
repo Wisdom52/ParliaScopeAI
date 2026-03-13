@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, TIMESTAMP, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, TIMESTAMP, DateTime, Boolean, Date
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -106,6 +106,9 @@ class BarazaQuiz(Base):
     description = Column(Text, nullable=True)
     icon = Column(String, nullable=True) # e.g., Lucide icon name
     points_reward = Column(Integer, default=10)
+    difficulty = Column(String, default="beginner")  # beginner, intermediate, advanced
+    source_type = Column(String, default="manual")   # manual, ai_generated
+    generated_date = Column(Date, nullable=True)     # date quiz was generated (for daily refresh)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     questions = relationship("BarazaQuestion", back_populates="quiz", cascade="all, delete-orphan")

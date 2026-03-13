@@ -62,6 +62,8 @@ interface Quiz {
     description: string;
     points_reward: number;
     questions: Question[];
+    difficulty: string;
+    source_type?: string;
 }
 
 interface Question {
@@ -102,6 +104,8 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [userStats, setUserStats] = useState({ points: 0, badges: [] as Badge[] });
     const [loading, setLoading] = useState(true);
+    const [difficultyFilter, setDifficultyFilter] = useState('all');
+    const [generatingQuizzes, setGeneratingQuizzes] = useState(false);
 
     // Live Stream States
     const [liveVid, setLiveVid] = useState('dQw4w9WgXcQ');
@@ -140,7 +144,7 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
     useEffect(() => {
         fetchData();
         if (activeSection === 'game') fetchGamification();
-    }, [activeSection]);
+    }, [activeSection, difficultyFilter]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -155,7 +159,10 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                 }
                 fetchChats();
             } else if (activeSection === 'game') {
-                const res = await fetch(`${API_BASE_URL}/baraza/quizzes`);
+                const url = difficultyFilter !== 'all'
+                    ? `${API_BASE_URL}/baraza/quizzes?difficulty=${difficultyFilter}`
+                    : `${API_BASE_URL}/baraza/quizzes`;
+                const res = await fetch(url);
                 const data = await res.json();
                 setQuizzes(Array.isArray(data) ? data : []);
             } else {
@@ -313,9 +320,29 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
             });
             const data = await res.json();
             setQuizResult({ correct: data.correct, total: data.total, reward: data.points_awarded });
+            if (data.new_badges && data.new_badges.length > 0) {
+                Alert.alert("New Badges!", `You unlocked: ${data.new_badges.map((b: any) => b.name).join(', ')}`);
+            }
             fetchGamification();
         } catch (err) {
             Alert.alert("Error", "Failed to submit quiz.");
+        }
+    };
+
+    const handleRefreshQuizzes = async () => {
+        setGeneratingQuizzes(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/baraza/quizzes/generate-daily`);
+            if (res.ok) {
+                Alert.alert("Success", "Generated fresh AI quizzes for today!");
+                fetchData();
+            } else {
+                Alert.alert("Info", "New quizzes are already available for today.");
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setGeneratingQuizzes(false);
         }
     };
 
@@ -709,11 +736,65 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                 <Text style={styles.sectionTitle}>Civic IQ Challenges</Text>
             </View>
 
+            {/* Difficulty Tabs & Refresh */}
+            <View style={styles.diffTabs}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {['all', 'beginner', 'intermediate', 'advanced'].map(d => (
+                        <TouchableOpacity
+                            key={d}
+                            style={[styles.diffTabTab, difficultyFilter === d && styles.activeDiffTab]}
+                            onPress={() => setDifficultyFilter(d)}
+                        >
+                            <MaterialCommunityIcons
+                                name={d === 'beginner' ? 'sprout' : d === 'intermediate' ? 'star' : d === 'advanced' ? 'fire' : 'format-list-bulleted'}
+                                size={14}
+                                color={difficultyFilter === d ? '#007AFF' : '#666'}
+                            />
+                            <Text style={[styles.diffTabText, difficultyFilter === d && { color: '#007AFF' }]}>
+                                {d.charAt(0).toUpperCase() + d.slice(1)}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
+            <TouchableOpacity
+                style={styles.refreshBtn}
+                onPress={handleRefreshQuizzes}
+                disabled={generatingQuizzes}
+            >
+                <MaterialCommunityIcons name="robot" size={18} color="#007AFF" />
+                <Text style={styles.refreshBtnText}>
+                    {generatingQuizzes ? 'Generating...' : 'AI Refresh Quizzes'}
+                </Text>
+            </TouchableOpacity>
+
             {quizzes.length > 0 ? quizzes.map(q => (
                 <TouchableOpacity key={q.id} style={styles.card} onPress={() => { setCurrentQuiz(q); setQuizAnswers([]); setQuizResult(null); }}>
-                    <View style={styles.quizIconContainer}>
-                        <MaterialCommunityIcons name="brain" size={24} color="#007AFF" />
+                    <View style={styles.pollHeader}>
+                        <View style={styles.quizIconContainer}>
+                            <MaterialCommunityIcons name="brain" size={24} color="#007AFF" />
+                        </View>
+                        <View style={styles.quizTags}>
+                            <View style={[styles.diffPill, q.difficulty === 'beginner' ? styles.diffBeginner : q.difficulty === 'intermediate' ? styles.diffIntermediate : styles.diffAdvanced]}>
+                                <MaterialCommunityIcons
+                                    name={q.difficulty === 'beginner' ? 'sprout' : q.difficulty === 'intermediate' ? 'star' : 'fire'}
+                                    size={10}
+                                    color={q.difficulty === 'beginner' ? '#2e7d32' : q.difficulty === 'intermediate' ? '#f57c00' : '#d32f2f'}
+                                />
+                                <Text style={[styles.diffPillText, { color: q.difficulty === 'beginner' ? '#2e7d32' : q.difficulty === 'intermediate' ? '#f57c00' : '#d32f2f' }]}>
+                                    {q.difficulty?.toUpperCase()}
+                                </Text>
+                            </View>
+                            {(q as any).source_type === 'ai_generated' && (
+                                <View style={styles.aiPill}>
+                                    <MaterialCommunityIcons name="robot" size={10} color="#7b1fa2" />
+                                    <Text style={styles.aiPillText}>AI</Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
+
                     <Text style={styles.cardTitle}>{q.title}</Text>
                     <Text style={styles.cardDesc}>{q.description}</Text>
                     <View style={styles.quizCardFooter}>
@@ -723,7 +804,7 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                         </View>
                     </View>
                 </TouchableOpacity>
-            )) : <Text style={styles.emptyMsg}>Stay tuned for more quizzes!</Text>}
+            )) : <Text style={styles.emptyMsg}>No quizzes yet — tap AI Refresh to generate today's challenges!</Text>}
         </View>
     );
 
@@ -1052,4 +1133,18 @@ const styles = StyleSheet.create({
     pollOptionInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     removeBtn: { marginBottom: 15 },
     label: { fontSize: 12, fontWeight: '700', color: '#666', marginBottom: 8, textTransform: 'uppercase' },
+    diffTabs: { backgroundColor: '#F2F2F7', borderRadius: 12, padding: 4, marginBottom: 15 },
+    diffTabTab: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    activeDiffTab: { backgroundColor: '#fff', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+    diffTabText: { fontSize: 12, fontWeight: '700', color: '#666' },
+    refreshBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, backgroundColor: '#f0f7ff', borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#cce5ff' },
+    refreshBtnText: { color: '#007AFF', fontSize: 14, fontWeight: '700' },
+    quizTags: { alignItems: 'flex-end', gap: 6 },
+    diffPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+    diffPillText: { fontSize: 9, fontWeight: '800' },
+    aiPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, backgroundColor: '#f3e5f5' },
+    aiPillText: { fontSize: 9, fontWeight: '800', color: '#7b1fa2' },
+    diffBeginner: { backgroundColor: '#e8f5e9' },
+    diffIntermediate: { backgroundColor: '#fff3e0' },
+    diffAdvanced: { backgroundColor: '#ffebee' },
 });

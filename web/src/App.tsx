@@ -61,7 +61,7 @@ function AppContent() {
       {/* Tab Content */}
       <main className="tab-content">
         {activeTab === 'daily' && <DailyPage />}
-        {activeTab === 'docs' && <SearchPage />}
+        {activeTab === 'docs' && <SearchPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'baraza' && <BarazaPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'admin' && user?.is_admin && <AdminPage />}

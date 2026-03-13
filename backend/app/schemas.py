@@ -308,6 +308,8 @@ class BarazaQuizOut(BaseModel):
     description: Optional[str]
     icon: Optional[str]
     points_reward: int
+    difficulty: str = "beginner"
+    source_type: str = "manual"
     questions: List[BarazaQuestionOut] = []
 
     class Config:

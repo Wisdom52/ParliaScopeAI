@@ -39,8 +39,12 @@ interface FactShieldResult {
     sources: FactShieldSource[];
 }
 
-export const SearchPage: React.FC = () => {
-    const { token } = useAuth();
+interface SearchPageProps {
+    onSwitchToProfile?: () => void;
+}
+
+export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => {
+    const { user, token } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [documents, setDocuments] = useState<Hansard[]>([]);
     const [docsLoading, setDocsLoading] = useState(false);
@@ -122,8 +126,16 @@ export const SearchPage: React.FC = () => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatMessages]);
 
+    const ensureLoggedIn = () => {
+        if (!user) {
+            if (onSwitchToProfile) onSwitchToProfile();
+            return false;
+        }
+        return true;
+    };
+
     const handleSendChat = async () => {
-        if (!chatInput.trim()) return;
+        if (!chatInput.trim() || !ensureLoggedIn()) return;
 
         const userMsg: ChatMessage = { role: 'user', content: chatInput };
         setChatMessages(prev => [...prev, userMsg]);
@@ -151,7 +163,7 @@ export const SearchPage: React.FC = () => {
                     sources: data.sources
                 }]);
             } else {
-                setChatMessages(prev => [...prev, { role: 'assistant', content: `Sorry, I couldn't find that in the documents. ${data.detail || ''}` }]);
+                setChatMessages(prev => [...prev, { role: 'assistant', content: `Something went wrong. ${data.detail || ''}` }]);
             }
         } catch (error) {
             setChatMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);

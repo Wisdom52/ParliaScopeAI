@@ -22,7 +22,9 @@ from app.schemas import (
 from app.routes.auth import get_current_user
 from app.core.moderation import check_profanity, is_spam
 from app.core.security_utils import get_notification_trigger
-from datetime import datetime, timedelta
+from app.services.quiz_generator import generate_ai_quiz, should_generate_quiz_today
+from datetime import datetime, timedelta, date
+import json
 
 router = APIRouter(prefix="/baraza", tags=["Digital Baraza"])
 
@@ -297,21 +299,69 @@ def post_live_chat(
     return db_chat
 
 # --- Civic IQ & Gamification ---
+
+def _award_badge_if_due(db, user_id: int, badge_name: str):
+    """Helper: Award a badge by name if not already earned."""
+    badge = db.query(BarazaBadge).filter(BarazaBadge.name == badge_name).first()
+    if badge:
+        exists = db.query(BarazaUserBadge).filter(
+            BarazaUserBadge.user_id == user_id,
+            BarazaUserBadge.badge_id == badge.id
+        ).first()
+        if not exists:
+            db.add(BarazaUserBadge(user_id=user_id, badge_id=badge.id))
+            return badge_name
+    return None
+
 @router.get("/quizzes", response_model=List[BarazaQuizOut])
-def get_quizzes(db: Session = Depends(get_db)):
-    return db.query(BarazaQuiz).all()
+def get_quizzes(difficulty: str = None, db: Session = Depends(get_db)):
+    query = db.query(BarazaQuiz)
+    if difficulty:
+        query = query.filter(BarazaQuiz.difficulty == difficulty)
+    return query.order_by(BarazaQuiz.created_at.desc()).all()
+
+@router.get("/quizzes/generate-daily")
+async def generate_daily_quizzes(db: Session = Depends(get_db)):
+    """
+    Auto-generates one AI quiz per difficulty level if none exists for today.
+    Meant to be called on app startup or by a scheduler.
+    """
+    generated = []
+    for difficulty in ["beginner", "intermediate", "advanced"]:
+        if not should_generate_quiz_today(db, difficulty):
+            continue
+        quiz_data = generate_ai_quiz(db, difficulty)
+        if not quiz_data:
+            continue
+        db_quiz = BarazaQuiz(
+            title=quiz_data["title"],
+            description=quiz_data["description"],
+            points_reward=quiz_data["points_reward"],
+            difficulty=difficulty,
+            source_type="ai_generated",
+            generated_date=date.today()
+        )
+        db.add(db_quiz)
+        db.commit()
+        db.refresh(db_quiz)
+        for q in quiz_data["questions"]:
+            db_q = BarazaQuestion(
+                quiz_id=db_quiz.id,
+                question_text=q["question_text"],
+                options=json.dumps(q["options"]),
+                correct_option_index=q["correct_index"]
+            )
+            db.add(db_q)
+        db.commit()
+        generated.append({"difficulty": difficulty, "title": quiz_data["title"]})
+    return {"generated": generated, "message": f"{len(generated)} quizzes generated today."}
 
 @router.get("/user/gamification", response_model=BarazaGamificationStatus)
 def get_gamification_status(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     score = db.query(BarazaUserScore).filter(BarazaUserScore.user_id == current_user.id).first()
     points = score.prosperity_points if score else 0
-    
     badges = db.query(BarazaBadge).join(BarazaUserBadge).filter(BarazaUserBadge.user_id == current_user.id).all()
-    
-    return {
-        "prosperity_points": points,
-        "badges": badges
-    }
+    return {"prosperity_points": points, "badges": badges}
 
 @router.post("/quizzes/{quiz_id}/submit")
 def submit_quiz(quiz_id: int, answers: List[int], db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -323,32 +373,50 @@ def submit_quiz(quiz_id: int, answers: List[int], db: Session = Depends(get_db),
     if len(answers) != len(questions):
         raise HTTPException(status_code=400, detail="Invalid number of answers")
     
-    correct_count = 0
-    for i, q in enumerate(questions):
-        if answers[i] == q.correct_option_index:
-            correct_count += 1
-            
-    # Award points if perfect score (simplified logic)
+    correct_count = sum(1 for i, q in enumerate(questions) if answers[i] == q.correct_option_index)
+    points_awarded = 0
+    new_badges = []
+
     if correct_count == len(questions):
+        # Award points
         score = db.query(BarazaUserScore).filter(BarazaUserScore.user_id == current_user.id).first()
         if not score:
             score = BarazaUserScore(user_id=current_user.id, prosperity_points=quiz.points_reward)
             db.add(score)
         else:
             score.prosperity_points += quiz.points_reward
-        
-        # Check for first quiz badge
-        badge = db.query(BarazaBadge).filter(BarazaBadge.name == "First Steps").first()
-        if badge:
-            exists = db.query(BarazaUserBadge).filter(
-                BarazaUserBadge.user_id == current_user.id,
-                BarazaUserBadge.badge_id == badge.id
-            ).first()
-            if not exists:
-                new_ub = BarazaUserBadge(user_id=current_user.id, badge_id=badge.id)
-                db.add(new_ub)
-        
+        db.flush()  # flush so score.prosperity_points is updated before badge checks
+        points_awarded = quiz.points_reward
+
+        # --- Badge: First Steps (completed any quiz) ---
+        b = _award_badge_if_due(db, current_user.id, "First Steps")
+        if b: new_badges.append(b)
+
+        # --- Badge: Civic Novice (completed a beginner quiz) ---
+        if quiz.difficulty == "beginner":
+            b = _award_badge_if_due(db, current_user.id, "Civic Novice")
+            if b: new_badges.append(b)
+
+        # --- Badge: Parliament Scholar (completed an advanced quiz) ---
+        if quiz.difficulty == "advanced":
+            b = _award_badge_if_due(db, current_user.id, "Parliament Scholar")
+            if b: new_badges.append(b)
+
+        # --- Badge: Rising Patriot (50+ prosperity points) ---
+        if score.prosperity_points >= 50:
+            b = _award_badge_if_due(db, current_user.id, "Rising Patriot")
+            if b: new_badges.append(b)
+
+        # --- Badge: Civic Champion (200+ prosperity points) ---
+        if score.prosperity_points >= 200:
+            b = _award_badge_if_due(db, current_user.id, "Civic Champion")
+            if b: new_badges.append(b)
+
         db.commit()
-        return {"correct": correct_count, "total": len(questions), "points_awarded": quiz.points_reward}
-    
-    return {"correct": correct_count, "total": len(questions), "points_awarded": 0}
+
+    return {
+        "correct": correct_count,
+        "total": len(questions),
+        "points_awarded": points_awarded,
+        "new_badges": new_badges
+    }

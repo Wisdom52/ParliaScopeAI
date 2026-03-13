@@ -841,3 +841,120 @@
         transform: translateY(0);
     }
 }
+
+/* New Quiz Controls & Pills */
+.quiz-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.difficulty-tabs {
+    display: flex;
+    background: #eef2f6;
+    padding: 0.3rem;
+    border-radius: 12px;
+    gap: 0.2rem;
+}
+
+.diff-tab {
+    padding: 0.6rem 1.2rem;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    color: #666;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.diff-tab.active {
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.diff-tab.active.diff-beginner { color: #2e7d32; }
+.diff-tab.active.diff-intermediate { color: #f57c00; }
+.diff-tab.active.diff-advanced { color: #d32f2f; }
+
+.refresh-quiz-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1.2rem;
+    background: var(--bg-surface, #f8f9fa);
+    border: 1px solid var(--border, #eee);
+    border-radius: 12px;
+    font-weight: 700;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.refresh-quiz-btn:hover:not(:disabled) {
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.quiz-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.quiz-card-header .quiz-icon {
+    margin-bottom: 0;
+}
+
+.quiz-tags {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.diff-pill {
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.diff-pill.diff-beginner { background: #e8f5e9; color: #2e7d32; }
+.diff-pill.diff-intermediate { background: #fff3e0; color: #f57c00; }
+.diff-pill.diff-advanced { background: #ffebee; color: #d32f2f; }
+
+.ai-pill {
+    background: #f3e5f5;
+    color: #7b1fa2;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+.new-badges-row {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: #fff9db;
+    border-radius: 16px;
+    border: 1px dashed #fcc419;
+}
+
+.new-badge-pill {
+    display: inline-block;
+    background: white;
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-weight: 700;
+    margin: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    color: #1a1a1a;
+}

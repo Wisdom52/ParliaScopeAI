@@ -105,7 +105,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         
     return user
 
-def get_current_user_optional(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+
+def get_current_user_optional(token: str = Depends(optional_oauth2_scheme), db: Session = Depends(get_db)):
     """
     Optional dependency to identify the user if a token is present, 
     but does not raise an error if not authenticated.
