@@ -4,8 +4,11 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from app.database import get_db
 from app.models.user import User
 from app.models.location import County, Constituency
-from app.schemas import UserCreate, Token, UserLogin, User as UserSchema, UserUpdate
-from app.core.security import verify_password, get_password_hash, create_access_token, hash_id_number
+from app.models.speaker import Speaker
+from app.models.speaker_vault import SpeakerCredentialVault
+from app.models.verification_request import LeaderVerificationRequest
+from app.schemas import UserCreate, Token, UserLogin, User as UserSchema, UserUpdate, LeaderClaimRequest
+from app.core.security import verify_password, get_password_hash, create_access_token, hash_id_number, verify_id_number
 from app.core.logger import logger
 from datetime import timedelta
 
@@ -208,3 +211,60 @@ def delete_account(
 
     db.commit()
     return {"detail": "Account successfully deleted and all personal data anonymised."}
+
+@router.post("/claim-leader", status_code=201)
+def claim_leader_profile(
+    claim: LeaderClaimRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Securely claim an official leadership profile.
+    Validates Maisha Namba and Staff ID against the Vault before creating
+    a pending verification request for admin review.
+    """
+    try:
+        # 1. Check if user already has a pending or approved claim
+        existing_req = db.query(LeaderVerificationRequest).filter(
+            LeaderVerificationRequest.user_id == user.id,
+            LeaderVerificationRequest.status.in_(["PENDING", "APPROVED"])
+        ).first()
+        if existing_req:
+            raise HTTPException(status_code=400, detail="You already have a pending or active leader profile claim.")
+
+        # 2. Check if the speaker is already claimed by someone else
+        speaker_claimed = db.query(User).filter(User.speaker_id == claim.speaker_id, User.is_verified == True).first()
+        if speaker_claimed:
+            raise HTTPException(status_code=400, detail="This official profile has already been verified for another user.")
+
+        # 3. Retrieve the verification vault for this speaker
+        vault = db.query(SpeakerCredentialVault).filter(SpeakerCredentialVault.speaker_id == claim.speaker_id).first()
+        if not vault:
+            logger.warning(f"No verification vault found for Speaker ID {claim.speaker_id}. Verification impossible.")
+            raise HTTPException(status_code=404, detail="Official verification records for this leader are not yet in the system.")
+
+        # 4. Securely verify the ID numbers (something they know)
+        if not verify_id_number(claim.maisha_namba, vault.maisha_namba_hash) or \
+           not verify_id_number(claim.staff_id, vault.staff_id_hash):
+            logger.warning(f"Failed identity claim attempt by {user.email} for Speaker ID {claim.speaker_id}.")
+            raise HTTPException(status_code=401, detail="The Maisha Namba or Staff ID provided does not match our official records.")
+
+        # 5. Create the Verification Request (something they have - for further review)
+        new_request = LeaderVerificationRequest(
+            user_id=user.id,
+            speaker_id=claim.speaker_id,
+            maisha_card_url=claim.maisha_card_url,
+            staff_card_url=claim.staff_card_url,
+            status="PENDING"
+        )
+        db.add(new_request)
+        db.commit()
+
+        logger.info(f"Leader claim submitted successfully by {user.email} for Speaker {claim.speaker_id}.")
+        return {"detail": "Profile identity verified. Your claim is pending final manual approval of your ID photos by an administrator."}
+
+    except Exception as e:
+        logger.error(f"Error in claim_leader_profile: {e}", exc_info=True)
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))

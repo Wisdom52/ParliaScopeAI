@@ -10,6 +10,10 @@ interface Meeting {
     scheduled_at: string;
     meeting_link: string;
     host_id: number;
+    target_audience: string;
+    visibility_scope: string;
+    county_id?: number;
+    constituency_id?: number;
 }
 
 interface PollOption {
@@ -26,6 +30,10 @@ interface Poll {
     creator_id: number | null;
     is_active: boolean;
     options: PollOption[];
+    target_audience: string;
+    visibility_scope: string;
+    county_id?: number;
+    constituency_id?: number;
 }
 
 interface ForumPost {
@@ -35,6 +43,10 @@ interface ForumPost {
     author_name: string;
     created_at: string;
     comment_count?: number;
+    target_audience: string;
+    visibility_scope: string;
+    county_id?: number;
+    constituency_id?: number;
 }
 
 interface Quiz {
@@ -115,6 +127,8 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
     const [pollType, setPollType] = useState('choice'); // choice, checkbox, boolean, text
     const [pollExpiresAt, setPollExpiresAt] = useState('');
     const [pollOptions, setPollOptions] = useState(['', '']);
+    const [targetAudience, setTargetAudience] = useState('ALL');
+    const [visibilityScope, setVisibilityScope] = useState('GLOBAL');
 
     useEffect(() => {
         fetchData();
@@ -124,8 +138,11 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
     const fetchData = async () => {
         setLoading(true);
         try {
+            const token = localStorage.getItem('parliaScope_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
             if (activeSection === 'live') {
-                const res = await fetch(`http://localhost:8000/baraza/live/stream`);
+                const res = await fetch(`http://localhost:8000/baraza/live/stream`, { headers });
                 const data = await res.json();
                 if (data.channel_id) {
                     setLiveVid(`live_stream?channel=${data.channel_id}`);
@@ -137,11 +154,11 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                 const url = difficultyFilter !== 'all'
                     ? `http://localhost:8000/baraza/quizzes?difficulty=${difficultyFilter}`
                     : `http://localhost:8000/baraza/quizzes`;
-                const res = await fetch(url);
+                const res = await fetch(url, { headers });
                 const data = await res.json();
                 setQuizzes(Array.isArray(data) ? data : []);
             } else {
-                const res = await fetch(`http://localhost:8000/baraza/${activeSection === 'forum' ? 'forum' : activeSection}`);
+                const res = await fetch(`http://localhost:8000/baraza/${activeSection === 'forum' ? 'forum' : activeSection}`, { headers });
                 const data = await res.json();
                 if (activeSection === 'meetings') setMeetings(Array.isArray(data) ? data : []);
                 else if (activeSection === 'polls') setPolls(Array.isArray(data) ? data : []);
@@ -321,7 +338,9 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                     title: newTitle,
                     description: newContent,
                     meeting_link: newLink,
-                    scheduled_at: newScheduledAt || new Date().toISOString()
+                    scheduled_at: newScheduledAt || new Date().toISOString(),
+                    target_audience: targetAudience,
+                    visibility_scope: visibilityScope
                 };
             } else if (activeSection === 'polls') {
                 let options = pollOptions.filter(o => o.trim()).map(o => ({ text: o }));
@@ -332,10 +351,17 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                     question: newTitle,
                     poll_type: pollType,
                     expires_at: pollExpiresAt || null,
-                    options
+                    options,
+                    target_audience: targetAudience,
+                    visibility_scope: visibilityScope
                 };
             } else {
-                body = { title: newTitle, content: newContent };
+                body = { 
+                    title: newTitle, 
+                    content: newContent,
+                    target_audience: targetAudience,
+                    visibility_scope: visibilityScope
+                };
             }
 
             const method = editingMeeting ? 'PUT' : 'POST';
@@ -362,6 +388,8 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                 setPollType('choice');
                 setEditingMeeting(null);
                 setPollOptions(['', '']);
+                setTargetAudience('ALL');
+                setVisibilityScope('GLOBAL');
             } else {
                 const data = await res.json();
                 alert(data.detail || "Failed to submit.");
@@ -444,7 +472,10 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                 </div>
 
                 <div className="section-tabs">
-                    {['meetings', 'polls', 'forum', 'live', 'game'].map((sec) => (
+                    {['meetings', 'polls', 'forum', 'live', 'game'].filter(sec => {
+                        if (user?.role === 'LEADER' && (sec === 'live' || sec === 'game')) return false;
+                        return true;
+                    }).map((sec) => (
                         <button
                             key={sec}
                             className={`tab-btn ${activeSection === sec ? 'active' : ''}`}
@@ -481,6 +512,10 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                     {meetings.length > 0 ? meetings.map(m => (
                                         <div key={m.id} className="meeting-card">
                                             <div className="card-status">Upcoming</div>
+                                            <div className="card-tags">
+                                                <span className={`audience-badge ${m.target_audience.toLowerCase()}`}>{m.target_audience}</span>
+                                                <span className={`scope-badge ${m.visibility_scope.toLowerCase()}`}>{m.visibility_scope}</span>
+                                            </div>
                                             <h4>{m.title}</h4>
                                             <p className="description">{m.description}</p>
                                             <div className="card-footer">
@@ -525,6 +560,8 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                             <div key={p.id} className={`poll-card ${isExpired ? 'expired' : ''}`}>
                                                 <div className="poll-meta">
                                                     <span className={`type-tag ${p.poll_type}`}>{p.poll_type}</span>
+                                                    <span className={`audience-badge ${p.target_audience.toLowerCase()}`}>{p.target_audience}</span>
+                                                    <span className={`scope-badge ${p.visibility_scope.toLowerCase()}`}>{p.visibility_scope}</span>
                                                     {isExpired ? (
                                                         <span className="status-tag expired">Expired</span>
                                                     ) : p.expires_at ? (
@@ -582,6 +619,10 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                                 <span>{p.author_name || 'Citizen'}</span>
                                                 <span className="dot">•</span>
                                                 <span className="date">{new Date(p.created_at).toLocaleDateString()}</span>
+                                                <div className="card-tags">
+                                                    <span className={`audience-badge ${p.target_audience.toLowerCase()}`}>{p.target_audience}</span>
+                                                    <span className={`scope-badge ${p.visibility_scope.toLowerCase()}`}>{p.visibility_scope}</span>
+                                                </div>
                                             </div>
                                             <h4>{p.title}</h4>
                                             <p className="excerpt">{p.content}</p>
@@ -814,6 +855,23 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                             <button className="close-btn" onClick={() => { setShowModal(false); setEditingMeeting(null); }}>✕</button>
                         </div>
                         <form onSubmit={handleSubmit}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="form-group">
+                                    <label>Who can Participate?</label>
+                                    <select value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className="form-select">
+                                        <option value="ALL">Everyone</option>
+                                        <option value="LEADERS">Leaders Only</option>
+                                        <option value="CITIZENS">Citizens Only</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Visibility Scope</label>
+                                    <select value={visibilityScope} onChange={(e) => setVisibilityScope(e.target.value)} className="form-select">
+                                        <option value="GLOBAL">Global (Everyone)</option>
+                                        <option value="REGIONAL">Local (My Constituents)</option>
+                                    </select>
+                                </div>
+                            </div>
                             {activeSection === 'polls' ? (
                                 <>
                                     <div className="form-group">

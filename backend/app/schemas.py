@@ -43,6 +43,8 @@ class User(UserBase):
     push_token: Optional[str] = None
     is_admin: bool = False
     is_active: bool = True
+    role: str = "CITIZEN"
+    speaker_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -175,6 +177,10 @@ class BarazaMeetingBase(BaseModel):
     meeting_link: Optional[str] = None
     host_id: Optional[int] = None
     speaker_id: Optional[int] = None
+    target_audience: str = "ALL"
+    visibility_scope: str = "GLOBAL"
+    county_id: Optional[int] = None
+    constituency_id: Optional[int] = None
 
 class BarazaMeetingCreate(BarazaMeetingBase):
     pass
@@ -211,6 +217,10 @@ class BarazaPollBase(BaseModel):
     poll_type: str = "choice" # choice, checkbox, boolean, text
     expires_at: Optional[datetime] = None
     is_active: bool = True
+    target_audience: str = "ALL"
+    visibility_scope: str = "GLOBAL"
+    county_id: Optional[int] = None
+    constituency_id: Optional[int] = None
 
 class BarazaPollCreate(BarazaPollBase):
     options: List[BarazaPollOptionCreate]
@@ -253,6 +263,10 @@ class BarazaForumCommentOut(BarazaForumCommentBase):
 class BarazaForumPostBase(BaseModel):
     title: str
     content: str
+    target_audience: str = "ALL"
+    visibility_scope: str = "GLOBAL"
+    county_id: Optional[int] = None
+    constituency_id: Optional[int] = None
 
 class BarazaForumPostCreate(BarazaForumPostBase):
     pass
@@ -368,3 +382,11 @@ class StanceAnalysisResponse(BaseModel):
     overall_consistency: float
     summary: str
     topic_breakdown: List[StanceRecord]
+
+# --- Leader Verification ---
+class LeaderClaimRequest(BaseModel):
+    speaker_id: int
+    maisha_namba: str
+    staff_id: str
+    maisha_card_url: Optional[str] = None
+    staff_card_url: Optional[str] = None

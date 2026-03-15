@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models.baraza import (
     BarazaMeeting, BarazaPoll, BarazaPollOption, BarazaPollVote, 
@@ -19,23 +19,43 @@ from app.schemas import (
     BarazaLiveChatCreate, BarazaLiveChatOut,
     BarazaQuizOut, BarazaGamificationStatus
 )
-from app.routes.auth import get_current_user
+from app.routes.auth import get_current_user, get_current_user_optional
 from app.core.moderation import check_profanity, is_spam
 from app.core.security_utils import get_notification_trigger
 from app.services.quiz_generator import generate_ai_quiz, should_generate_quiz_today
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import json
 
 router = APIRouter(prefix="/baraza", tags=["Digital Baraza"])
 
 # --- Meetings ---
 @router.get("/meetings", response_model=List[BarazaMeetingOut])
-def get_meetings(db: Session = Depends(get_db)):
+def get_meetings(current_user: Optional[User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
     from datetime import timedelta
-    two_hours_ago = datetime.utcnow() - timedelta(hours=2)
-    return db.query(BarazaMeeting).filter(
-        BarazaMeeting.scheduled_at >= two_hours_ago
-    ).order_by(BarazaMeeting.scheduled_at.asc()).all()
+    two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+    query = db.query(BarazaMeeting).filter(BarazaMeeting.scheduled_at >= two_hours_ago)
+    
+    # Audience Filter
+    if current_user:
+        if current_user.role == "LEADER":
+            query = query.filter(BarazaMeeting.target_audience.in_(["ALL", "LEADERS"]))
+        else:
+            query = query.filter(BarazaMeeting.target_audience.in_(["ALL", "CITIZENS"]))
+            
+        # Regional Filter
+        # Show GLOBAL ones, or REGIONAL ones that match user's location
+        from sqlalchemy import or_
+        query = query.filter(or_(
+            BarazaMeeting.visibility_scope == "GLOBAL",
+            (BarazaMeeting.visibility_scope == "REGIONAL") & 
+            (BarazaMeeting.county_id == current_user.county_id) & 
+            ((BarazaMeeting.constituency_id == None) | (BarazaMeeting.constituency_id == current_user.constituency_id))
+        ))
+    else:
+        # Public view: only show ALL/GLOBAL
+        query = query.filter(BarazaMeeting.target_audience == "ALL", BarazaMeeting.visibility_scope == "GLOBAL")
+
+    return query.order_by(BarazaMeeting.scheduled_at.asc()).all()
 
 @router.post("/meetings", response_model=BarazaMeetingOut)
 def create_meeting(
@@ -45,6 +65,14 @@ def create_meeting(
 ):
     meeting_data = meeting.dict()
     meeting_data["host_id"] = current_user.id
+    
+    # Auto-fill location if regional and not specified
+    if meeting_data.get("visibility_scope") == "REGIONAL":
+        if not meeting_data.get("county_id"):
+            meeting_data["county_id"] = current_user.county_id
+        if not meeting_data.get("constituency_id"):
+            meeting_data["constituency_id"] = current_user.constituency_id
+            
     db_meeting = BarazaMeeting(**meeting_data)
     db.add(db_meeting)
     db.commit()
@@ -90,8 +118,28 @@ def delete_meeting(
 
 # --- Polls ---
 @router.get("/polls", response_model=List[BarazaPollOut])
-def get_polls(db: Session = Depends(get_db)):
-    polls = db.query(BarazaPoll).order_by(BarazaPoll.created_at.desc()).all()
+def get_polls(current_user: Optional[User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    query = db.query(BarazaPoll)
+    
+    # Audience Filter
+    if current_user:
+        if current_user.role == "LEADER":
+            query = query.filter(BarazaPoll.target_audience.in_(["ALL", "LEADERS"]))
+        else:
+            query = query.filter(BarazaPoll.target_audience.in_(["ALL", "CITIZENS"]))
+            
+        # Regional Filter
+        from sqlalchemy import or_
+        query = query.filter(or_(
+            BarazaPoll.visibility_scope == "GLOBAL",
+            (BarazaPoll.visibility_scope == "REGIONAL") & 
+            (BarazaPoll.county_id == current_user.county_id) & 
+            ((BarazaPoll.constituency_id == None) | (BarazaPoll.constituency_id == current_user.constituency_id))
+        ))
+    else:
+        query = query.filter(BarazaPoll.target_audience == "ALL", BarazaPoll.visibility_scope == "GLOBAL")
+        
+    polls = query.order_by(BarazaPoll.created_at.desc()).all()
     # Add vote counts to options
     for poll in polls:
         for option in poll.options:
@@ -109,6 +157,14 @@ def create_poll(
     poll_data = poll.dict()
     options_data = poll_data.pop("options")
     poll_data["creator_id"] = current_user.id
+    
+    # Auto-fill location if regional and not specified
+    if poll_data.get("visibility_scope") == "REGIONAL":
+        if not poll_data.get("county_id"):
+            poll_data["county_id"] = current_user.county_id
+        if not poll_data.get("constituency_id"):
+            poll_data["constituency_id"] = current_user.constituency_id
+            
     db_poll = BarazaPoll(**poll_data)
     db.add(db_poll)
     db.commit()
@@ -131,6 +187,20 @@ def delete_poll(
     db_poll = db.query(BarazaPoll).filter(BarazaPoll.id == poll_id).first()
     if not db_poll:
         raise HTTPException(status_code=404, detail="Poll not found")
+
+    # Participation Check (for deletion, not participation)
+    # This check ensures that only users who could potentially participate (or are leaders) can delete.
+    # However, the primary check for deletion is creator_id.
+    # The instruction seems to imply a target_audience check for *participation* in the context of deletion,
+    # which is unusual. Assuming the intent is to ensure the user is authorized based on the poll's audience
+    # *if* they were to interact with it, or if the poll is restricted.
+    # The original instruction snippet was for a forum post and had `db_post` and `post_id`.
+    # Adapting it to `db_poll` and `poll_id` for consistency with the provided snippet's location.
+    if db_poll.target_audience == "LEADERS" and current_user.role != "LEADER":
+        raise HTTPException(status_code=403, detail="Only leaders can delete polls targeted at leaders")
+    if db_poll.target_audience == "CITIZENS" and current_user.role != "CITIZEN":
+        raise HTTPException(status_code=403, detail="Only citizens can delete polls targeted at citizens")
+
     if db_poll.creator_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this poll")
     
@@ -148,8 +218,14 @@ def vote_poll(
     if not db_poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
+    # Participation Check
+    if db_poll.target_audience == "LEADERS" and current_user.role != "LEADER":
+        raise HTTPException(status_code=403, detail="Only leaders can participate in this poll")
+    if db_poll.target_audience == "CITIZENS" and current_user.role != "CITIZEN":
+        raise HTTPException(status_code=403, detail="Only citizens can participate in this poll")
+
     # Check expiration
-    if db_poll.expires_at and db_poll.expires_at < datetime.utcnow():
+    if db_poll.expires_at and db_poll.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="This poll has expired")
 
     # Check if user already voted in this poll
@@ -179,8 +255,26 @@ def vote_poll(
 
 # --- Forum ---
 @router.get("/forum", response_model=List[BarazaForumPostOut])
-def get_forum_posts(db: Session = Depends(get_db)):
-    posts = db.query(BarazaForumPost).order_by(BarazaForumPost.created_at.desc()).all()
+def get_forum_posts(current_user: Optional[User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    query = db.query(BarazaForumPost)
+    
+    if current_user:
+        if current_user.role == "LEADER":
+            query = query.filter(BarazaForumPost.target_audience.in_(["ALL", "LEADERS"]))
+        else:
+            query = query.filter(BarazaForumPost.target_audience.in_(["ALL", "CITIZENS"]))
+            
+        from sqlalchemy import or_
+        query = query.filter(or_(
+            BarazaForumPost.visibility_scope == "GLOBAL",
+            (BarazaForumPost.visibility_scope == "REGIONAL") & 
+            (BarazaForumPost.county_id == current_user.county_id) & 
+            ((BarazaForumPost.constituency_id == None) | (BarazaForumPost.constituency_id == current_user.constituency_id))
+        ))
+    else:
+        query = query.filter(BarazaForumPost.target_audience == "ALL", BarazaForumPost.visibility_scope == "GLOBAL")
+        
+    posts = query.order_by(BarazaForumPost.created_at.desc()).all()
     # Add author name
     for post in posts:
         post.author_name = post.author.full_name if post.author else "Citizen"
@@ -195,7 +289,11 @@ def create_forum_post(
     db_post = BarazaForumPost(
         title=post.title,
         content=post.content,
-        author_id=current_user.id
+        author_id=current_user.id,
+        target_audience=post.target_audience,
+        visibility_scope=post.visibility_scope,
+        county_id=post.county_id or (current_user.county_id if post.visibility_scope == "REGIONAL" else None),
+        constituency_id=post.constituency_id or (current_user.constituency_id if post.visibility_scope == "REGIONAL" else None)
     )
     db.add(db_post)
     db.commit()
@@ -250,12 +348,80 @@ async def get_pulse_stats(db: Session = Depends(get_db)):
     results = db.query(BarazaLivePulse.type, func.count(BarazaLivePulse.id)).group_by(BarazaLivePulse.type).all()
     return {r[0]: r[1] for r in results}
 
+@router.get("/live/pulse/analytics")
+def get_pulse_analytics(
+    county_id: Optional[int] = None,
+    constituency_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    # Map pulse types to support levels
+    weight_map = {
+        'fire': 100,
+        'love': 100,
+        'clap': 75,
+        'sad': 25,
+        'angry': 0
+    }
+    
+    query = db.query(BarazaLivePulse).join(User)
+    if county_id:
+        query = query.filter(User.county_id == county_id)
+    if constituency_id:
+        query = query.filter(User.constituency_id == constituency_id)
+    
+    # Filter for last 2 hours of activity
+    time_limit = datetime.now(timezone.utc) - timedelta(hours=2)
+    pulses = query.filter(BarazaLivePulse.created_at >= time_limit).all()
+    
+    if not pulses:
+        return [
+            {"topic": "Live Sitting Overview", "support": 0, "sentiment": "Waiting for Activity", "sample_size": 0}
+        ]
+    
+    # Aggregation
+    total = len(pulses)
+    weighted_sum = sum(weight_map.get(p.type, 50) for p in pulses)
+    avg_support = weighted_sum / total
+    
+    sentiment = "Balanced"
+    if avg_support > 80: sentiment = "Strongly Supportive"
+    elif avg_support > 60: sentiment = "Mostly Positive"
+    elif avg_support < 40: sentiment = "High Resistance"
+    elif avg_support < 20: sentiment = "Critical Opposition"
+
+    # We return the aggregated data as the primary "Live Sitting" stance
+    return [
+        {
+            "topic": "Live Sitting Overview", 
+            "support": round(avg_support), 
+            "sentiment": sentiment,
+            "sample_size": total
+        }
+    ]
+
 @router.get("/live/chat", response_model=List[BarazaLiveChatOut])
 def get_live_chats(db: Session = Depends(get_db)):
     # Fetch the 50 most recent chats
     chats = db.query(BarazaLiveChat).order_by(BarazaLiveChat.created_at.desc()).limit(50).all()
     # Reverse to return oldest to newest (better for UI appending)
     chats.reverse()
+    for chat in chats:
+        chat.user_name = chat.user.full_name if chat.user else "Citizen"
+    return chats
+
+@router.get("/live/chat/analytics", response_model=List[BarazaLiveChatOut])
+def get_live_chat_analytics(
+    county_id: Optional[int] = None,
+    constituency_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(BarazaLiveChat).join(User)
+    if county_id:
+        query = query.filter(User.county_id == county_id)
+    if constituency_id:
+        query = query.filter(User.constituency_id == constituency_id)
+    
+    chats = query.order_by(BarazaLiveChat.created_at.desc()).limit(50).all()
     for chat in chats:
         chat.user_name = chat.user.full_name if chat.user else "Citizen"
     return chats
@@ -285,7 +451,7 @@ def post_live_chat(
         raise HTTPException(status_code=400, detail="Spam detected. Please wait.")
         
     # Cooldown check (3 seconds)
-    if last_chats and last_chats[0].created_at > datetime.utcnow() - timedelta(seconds=3):
+    if last_chats and last_chats[0].created_at > datetime.now(timezone.utc) - timedelta(seconds=3):
         raise HTTPException(status_code=429, detail="Slow down! You're chatting too fast.")
 
     db_chat = BarazaLiveChat(

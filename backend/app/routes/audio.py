@@ -36,9 +36,9 @@ async def get_daily_brief(
         from app.services.audio_engine import get_document_brief
         data = await get_document_brief(db, item_id, item_type, lang)
         
-        # Ensure absolute URL for frontend
         if data.get("audio_url"):
-            data["audio_url"] = f"http://localhost:8000{data['audio_url']}"
+            # Return relative path to let client prepend its own API_BASE_URL
+            pass
             
         return data
     except Exception as e:

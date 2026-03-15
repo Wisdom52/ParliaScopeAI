@@ -8,6 +8,7 @@ import { HomeScreen } from './screens/HomeScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { DailyScreen } from './screens/DailyScreen';
 import { RepresentativeScreen } from './screens/RepresentativeScreen';
+import { LeaderDashboardScreen } from './screens/LeaderDashboardScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { BarazaScreen } from './screens/BarazaScreen';
@@ -22,6 +23,9 @@ const TABS: { id: TabId; label: string; icon: any }[] = [
     { id: 'representative', label: 'Leaders', icon: 'account-group-outline' },
     { id: 'profile', label: 'Profile', icon: 'account-outline' },
 ];
+
+const LEADER_TABS: TabId[] = ['baraza', 'representative', 'profile'];
+const ADMIN_TABS: TabId[] = ['profile'];
 
 export default function App() {
     const [user, setUser] = useState<any>(null);
@@ -51,6 +55,16 @@ export default function App() {
         checkAuth();
     }, []);
 
+    useEffect(() => {
+        if (user?.is_admin && activeTab !== 'profile') {
+            setActiveTab('profile');
+        } else if (user?.role === 'LEADER') {
+            if (activeTab === 'daily' || activeTab === 'docs') {
+                setActiveTab('representative');
+            }
+        }
+    }, [user, activeTab]);
+
     const handleOnboardingComplete = () => {
         checkAuth();
         setActiveTab('profile');
@@ -75,7 +89,9 @@ export default function App() {
                 {activeTab === 'daily' && <DailyScreen />}
                 {activeTab === 'docs' && <SearchScreen />}
                 {activeTab === 'baraza' && <BarazaScreen onSwitchToProfile={() => setActiveTab('profile')} user={user} />}
-                {activeTab === 'representative' && <RepresentativeScreen onSwitchToProfile={() => setActiveTab('profile')} />}
+                {activeTab === 'representative' && (
+                    user?.role === 'LEADER' ? <LeaderDashboardScreen user={user} token={token} /> : <RepresentativeScreen onSwitchToProfile={() => setActiveTab('profile')} />
+                )}
                 {activeTab === 'profile' && (
                     user ? (
                         <ProfileScreen
@@ -92,7 +108,7 @@ export default function App() {
 
             {/* Bottom Tab Bar */}
             <View style={styles.tabBar}>
-                {TABS.map(tab => (
+                {TABS.filter(t => user?.role === 'LEADER' ? LEADER_TABS.includes(t.id) : (user?.is_admin ? ADMIN_TABS.includes(t.id) : true)).map(tab => (
                     <TouchableOpacity
                         key={tab.id}
                         style={[styles.tabButton, activeTab === tab.id && styles.tabActive]}
@@ -104,7 +120,7 @@ export default function App() {
                             color={activeTab === tab.id ? '#007AFF' : '#888'}
                         />
                         <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
-                            {tab.label}
+                            {tab.id === 'representative' && user?.role === 'LEADER' ? 'Rep Portal' : tab.label}
                         </Text>
                     </TouchableOpacity>
                 ))}

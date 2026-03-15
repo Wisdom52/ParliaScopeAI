@@ -5,7 +5,7 @@ import traceback
 import time
 
 from app.core.logger import logger
-from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives, representatives_stance, baraza, fact_shield, admin
+from app.routes import auth, ingest, chat, audio, search, location, docs, subscriptions, bills, representatives, representatives_stance, baraza, fact_shield, admin, admin_leader
 from app.routes.ingest import perform_hansard_crawl
 from app.database import SessionLocal, engine, Base
 import app.models # Trigger models registration
@@ -64,6 +64,7 @@ app.include_router(representatives_stance.router)
 app.include_router(baraza.router)
 app.include_router(fact_shield.router)
 app.include_router(admin.router)
+app.include_router(admin_leader.router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

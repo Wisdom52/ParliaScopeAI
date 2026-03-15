@@ -38,6 +38,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [gamification, setGamification] = useState({ points: 0, badges: [] as Badge[] });
+    const [leaderStats, setLeaderStats] = useState<any>(null);
 
     useEffect(() => {
         if (user) {
@@ -88,8 +89,24 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
 
     useEffect(() => {
         fetchCounties();
-        fetchGamification();
-    }, []);
+        if (user?.role === 'LEADER' && user.speaker_id) {
+            fetchLeaderStats();
+        } else {
+            fetchGamification();
+        }
+    }, [user]);
+
+    const fetchLeaderStats = async () => {
+        try {
+            const res = await fetch(`http://localhost:8000/representatives/${user?.speaker_id}`);
+            if (res.ok) {
+                const data = await res.json();
+                setLeaderStats(data);
+            }
+        } catch (err) {
+            console.error("Error fetching leader stats:", err);
+        }
+    };
 
     useEffect(() => {
         if (formData.county_id) {
@@ -189,33 +206,36 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                                 </p>
                             )}
                         </div>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>WhatsApp Number for Alerts</label>
-                            {isEditing ? (
-                                <Input
-                                    value={formData.whatsapp_number}
-                                    onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
-                                    placeholder="+254700000000"
-                                />
-                            ) : (
-                                <p style={{ fontWeight: 600 }}>
-                                    <MessageCircle size={14} color="#666" style={{ marginRight: '8px' }} />
-                                    {user.whatsapp_number || 'Not provided'}
-                                </p>
-                            )}
-                        </div>
+                        {user.role !== 'LEADER' && !user.is_admin && (
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>WhatsApp Number for Alerts</label>
+                                {isEditing ? (
+                                    <Input
+                                        value={formData.whatsapp_number}
+                                        onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
+                                        placeholder="+254700000000"
+                                    />
+                                ) : (
+                                    <p style={{ fontWeight: 600 }}>
+                                        <MessageCircle size={14} color="#666" style={{ marginRight: '8px' }} />
+                                        {user.whatsapp_number || 'Not provided'}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Location Information */}
+                {!user.is_admin && (
                 <div className="card" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)' }}>
                     <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem', fontSize: '1.1rem', color: 'var(--primary)' }}>
-                        <MapPin size={20} /> Registered Location
+                        <MapPin size={20} /> {user.role === 'LEADER' ? 'Representation Location' : 'Registered Location'}
                     </h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>County</label>
-                            {isEditing ? (
+                            {isEditing && user.role !== 'LEADER' ? (
                                 <select
                                     value={formData.county_id}
                                     onChange={(e) => setFormData({ ...formData, county_id: parseInt(e.target.value), constituency_id: 0 })}
@@ -225,12 +245,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                                     {counties.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             ) : (
-                                <p style={{ fontWeight: 600 }}>{user.county_name || `County ID: ${user.county_id}`}</p>
+                                <p style={{ fontWeight: 600 }}>
+                                    {user.role === 'LEADER' ? (leaderStats?.county_name || leaderStats?.county_id || 'National') : (user.county_name || `County ID: ${user.county_id}`)}
+                                </p>
                             )}
                         </div>
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>Constituency</label>
-                            {isEditing ? (
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>{user.role === 'LEADER' ? 'Constituency / Sub-County' : 'Constituency'}</label>
+                            {isEditing && user.role !== 'LEADER' ? (
                                 <select
                                     value={formData.constituency_id}
                                     onChange={(e) => setFormData({ ...formData, constituency_id: parseInt(e.target.value) })}
@@ -241,53 +263,58 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                                     {constituencies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             ) : (
-                                <p style={{ fontWeight: 600 }}>{user.constituency_name || `Constituency ID: ${user.constituency_id}`}</p>
+                                <p style={{ fontWeight: 600 }}>
+                                    {user.role === 'LEADER' ? (leaderStats?.constituency_name || leaderStats?.constituency_id || 'National') : (user.constituency_name || `Constituency ID: ${user.constituency_id}`)}
+                                </p>
                             )}
                         </div>
                     </div>
                 </div>
+                )}
 
-                {/* Alert Settings Module */}
-                <AlertSettings />
+                {/* Alert Settings Module (Citizens only) */}
+                {user.role !== 'LEADER' && !user.is_admin && <AlertSettings />}
 
-                {/* Civic Passport */}
-                <div className="card" style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #333 100%)', border: 'none', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', color: 'white' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem', fontSize: '1.1rem', color: '#ffd43b' }}>
-                        <Trophy size={20} /> Civic Passport
-                    </h3>
-                    <div style={{ marginBottom: '2rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Prosperity Points</label>
-                                <span style={{ fontSize: '2rem', fontWeight: 800 }}>{gamification.points}</span>
+                {/* Civic Passport (Citizens only) */}
+                {user.role !== 'LEADER' && !user.is_admin && (
+                    <div className="card" style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #333 100%)', border: 'none', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', color: 'white' }}>
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem', fontSize: '1.1rem', color: '#ffd43b' }}>
+                            <Trophy size={20} /> Civic Passport
+                        </h3>
+                        <div style={{ marginBottom: '2rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Prosperity Points</label>
+                                    <span style={{ fontSize: '2rem', fontWeight: 800 }}>{gamification.points}</span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffd43b', background: 'rgba(255,212,59,0.1)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(255,212,59,0.2)' }}>
+                                        {gamification.points < 50 ? 'NOVICE' : gamification.points < 200 ? 'PATRIOT' : 'CHAMPION'}
+                                    </span>
+                                </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffd43b', background: 'rgba(255,212,59,0.1)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(255,212,59,0.2)' }}>
-                                    {gamification.points < 50 ? 'NOVICE' : gamification.points < 200 ? 'PATRIOT' : 'CHAMPION'}
-                                </span>
+                            <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.min((gamification.points / 200) * 100, 100)}%`, background: 'linear-gradient(90deg, #ffd43b, #fab005)', borderRadius: '4px' }} />
                             </div>
                         </div>
-                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${Math.min((gamification.points / 200) * 100, 100)}%`, background: 'linear-gradient(90deg, #ffd43b, #fab005)', borderRadius: '4px' }} />
+
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>Earned Badges</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                {gamification.badges.length > 0 ? gamification.badges.map(badge => (
+                                    <div key={badge.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '14px', width: '80px', textAlign: 'center' }} title={badge.description}>
+                                        <span style={{ fontSize: '1.8rem' }}>{badge.icon_url || '🏅'}</span>
+                                        <span style={{ fontSize: '0.65rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{badge.name}</span>
+                                    </div>
+                                )) : (
+                                    <div style={{ padding: '20px', textAlign: 'center', width: '100%', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: '14px' }}>
+                                        <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>No badges yet. Start a quiz in Baraza!</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-
-                    <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>Earned Badges</label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                            {gamification.badges.length > 0 ? gamification.badges.map(badge => (
-                                <div key={badge.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '14px', width: '80px', textAlign: 'center' }} title={badge.description}>
-                                    <span style={{ fontSize: '1.8rem' }}>{badge.icon_url || '🏅'}</span>
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{badge.name}</span>
-                                </div>
-                            )) : (
-                                <div style={{ padding: '20px', textAlign: 'center', width: '100%', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: '14px' }}>
-                                    <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>No badges yet. Start a quiz in Baraza!</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                )}
 
             </div>
 

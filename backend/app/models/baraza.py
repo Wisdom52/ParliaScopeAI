@@ -14,6 +14,13 @@ class BarazaMeeting(Base):
     # host_id can be a User ID who is a leader, or linked to a Speaker
     host_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     speaker_id = Column(Integer, ForeignKey("speakers.id"), nullable=True)
+    
+    # Granular Controls
+    target_audience = Column(String, default="ALL") # ALL, LEADERS, CITIZENS
+    visibility_scope = Column(String, default="GLOBAL") # GLOBAL, REGIONAL
+    county_id = Column(Integer, ForeignKey("counties.id"), nullable=True)
+    constituency_id = Column(Integer, ForeignKey("constituencies.id"), nullable=True)
+    
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     host = relationship("User")
@@ -28,6 +35,13 @@ class BarazaPoll(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     is_active = Column(Boolean, default=True)
+    
+    # Granular Controls
+    target_audience = Column(String, default="ALL") # ALL, LEADERS, CITIZENS
+    visibility_scope = Column(String, default="GLOBAL") # GLOBAL, REGIONAL
+    county_id = Column(Integer, ForeignKey("counties.id"), nullable=True)
+    constituency_id = Column(Integer, ForeignKey("constituencies.id"), nullable=True)
+    
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     options = relationship("BarazaPollOption", back_populates="poll", cascade="all, delete-orphan")
@@ -61,6 +75,13 @@ class BarazaForumPost(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Granular Controls
+    target_audience = Column(String, default="ALL") # ALL, LEADERS, CITIZENS
+    visibility_scope = Column(String, default="GLOBAL") # GLOBAL, REGIONAL
+    county_id = Column(Integer, ForeignKey("counties.id"), nullable=True)
+    constituency_id = Column(Integer, ForeignKey("constituencies.id"), nullable=True)
+    
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     author = relationship("User")

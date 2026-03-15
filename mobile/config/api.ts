@@ -8,24 +8,27 @@ import { Platform } from 'react-native';
  * - On web: uses localhost
  */
 function getApiBaseUrl(): string {
-    // Expo Go provides the debugger host which contains the dev machine's IP
-    const debuggerHost = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
+    // Expo Go provides the hostUri which contains the dev machine's IP (e.g. "192.168.1.5:8081")
+    const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.hostUri || '';
 
     if (Platform.OS === 'web') {
         return 'http://localhost:8000';
     }
 
-    if (debuggerHost) {
-        // debuggerHost is something like "192.168.1.236:8081" — extract the IP
-        const ip = debuggerHost.split(':')[0];
-        return `http://${ip}:8000`;
+    if (hostUri) {
+        // Extract IP and use backend port 8000
+        const ip = hostUri.split(':')[0];
+        if (ip && ip !== 'localhost') {
+            return `http://${ip}:8000`;
+        }
     }
 
-    // Fallback for Android emulator
+    // Fallback for Android emulator (standard android gateway)
     if (Platform.OS === 'android') {
         return 'http://10.0.2.2:8000';
     }
 
+    // Ultimate fallback
     return 'http://localhost:8000';
 }
 

@@ -24,12 +24,24 @@ def get_representatives(
         query = query.filter(Speaker.constituency_id == constituency_id)
     
     reps = query.all()
-    # Calculate average rating for each
+    # Calculate average rating and resolve names
     for rep in reps:
         avg = db.query(func.avg(RepresentativeReview.rating)).filter(
             RepresentativeReview.speaker_id == rep.id
         ).scalar()
         rep.average_rating = float(avg) if avg else 0.0
+
+        # Dynamic area name resolution
+        if not rep.county_name and rep.county_id:
+            from app.models.location import County
+            county = db.query(County).filter(County.id == rep.county_id).first()
+            if county:
+                rep.county_name = county.name
+        if not rep.constituency_name and rep.constituency_id:
+            from app.models.location import Constituency
+            constituency = db.query(Constituency).filter(Constituency.id == rep.constituency_id).first()
+            if constituency:
+                rep.constituency_name = constituency.name
         
     return reps
 
@@ -49,6 +61,18 @@ def get_representative(id: int, db: Session = Depends(get_db)):
     for review in rep.reviews:
         user = db.query(User).filter(User.id == review.user_id).first()
         review.user_name = user.full_name if user else "Anonymous Citizen"
+
+    # Dynamic area name resolution
+    if not rep.county_name and rep.county_id:
+        from app.models.location import County
+        county = db.query(County).filter(County.id == rep.county_id).first()
+        if county:
+            rep.county_name = county.name
+    if not rep.constituency_name and rep.constituency_id:
+        from app.models.location import Constituency
+        constituency = db.query(Constituency).filter(Constituency.id == rep.constituency_id).first()
+        if constituency:
+            rep.constituency_name = constituency.name
         
     return rep
 

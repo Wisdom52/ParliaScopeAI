@@ -181,11 +181,11 @@ DOCS/
 backend/static/
 backend/error_log.txt
 backend/alembic_error.txt
-backend/scripts/check_ingestion.py
-backend/scripts/final_check.py
-backend/scripts/test_ai_summary.py
-backend/scripts/check_bills.py
-backend/scripts/test_impact.py
+backend/scripts/check_*.py
+backend/scripts/test_*.py
+backend/scripts/debug_*.py
+backend/scripts/verify_*.py
+backend/scripts/fix_*.py
 *.log
 backend/*.html
 tmp/

@@ -1,0 +1,38 @@
+from app.database import SessionLocal
+from app.models.speaker_vault import SpeakerCredentialVault
+from app.core.security import hash_id_number
+from app.core.logger import logger
+
+def seed_leader_vault():
+    db = SessionLocal()
+    try:
+        # Sample credentials for the first 4 real leaders in the DB
+        # Note: In a real system, these would be securely imported from official parliamentary records.
+        sample_creds = [
+            {"speaker_id": 1, "maisha": "MAISHA-1234", "staff": "STAFF-001"},
+            {"speaker_id": 2, "maisha": "MAISHA-5678", "staff": "STAFF-002"},
+            {"speaker_id": 3, "maisha": "MAISHA-9012", "staff": "STAFF-003"},
+            {"speaker_id": 4, "maisha": "MAISHA-3456", "staff": "STAFF-004"},
+        ]
+
+        for cred in sample_creds:
+            # Check if already exists
+            exists = db.query(SpeakerCredentialVault).filter(SpeakerCredentialVault.speaker_id == cred["speaker_id"]).first()
+            if not exists:
+                new_entry = SpeakerCredentialVault(
+                    speaker_id=cred["speaker_id"],
+                    maisha_namba_hash=hash_id_number(cred["maisha"]),
+                    staff_id_hash=hash_id_number(cred["staff"])
+                )
+                db.add(new_entry)
+        
+        db.commit()
+        print("Successfully seeded Speaker Credential Vault with sample data.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error seeding vault: {e}")
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    seed_leader_vault()

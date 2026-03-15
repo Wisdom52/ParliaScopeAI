@@ -29,12 +29,30 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
     const [constituencies, setConstituencies] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    const [leaderStats, setLeaderStats] = useState<any>(null);
+
     useEffect(() => {
         fetch(`${API_BASE_URL}/location/counties`)
             .then(res => res.json())
             .then(data => setCounties(data))
             .catch(err => console.error("Failed to fetch counties", err));
-    }, []);
+        
+        if (user?.role === 'LEADER' && user?.speaker_id) {
+            fetchLeaderStats();
+        }
+    }, [user]);
+
+    const fetchLeaderStats = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/representatives/${user.speaker_id}`);
+            if (res.ok) {
+                const data = await res.json();
+                setLeaderStats(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch leader stats", e);
+        }
+    };
 
     useEffect(() => {
         if (formData.county_id) {
@@ -120,64 +138,70 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                         )}
                     </View>
 
-                    <View style={styles.field}>
-                        <Text style={styles.label}>WhatsApp Number (Alerts)</Text>
-                        {isEditing ? (
-                            <Input
-                                value={formData.whatsapp_number}
-                                onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
-                                placeholder="+254700000000"
-                            />
-                        ) : (
-                            <Text style={styles.value}>{user?.whatsapp_number || 'Not provided'}</Text>
-                        )}
-                    </View>
+                    {user?.role !== 'LEADER' && !user?.is_admin && (
+                        <View style={styles.field}>
+                            <Text style={styles.label}>WhatsApp Number (Alerts)</Text>
+                            {isEditing ? (
+                                <Input
+                                    value={formData.whatsapp_number}
+                                    onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
+                                    placeholder="+254700000000"
+                                />
+                            ) : (
+                                <Text style={styles.value}>{user?.whatsapp_number || 'Not provided'}</Text>
+                            )}
+                        </View>
+                    )}
                 </View>
 
-                <Text style={styles.sectionTitle}>Location Details</Text>
-                <View style={styles.card}>
-                    <View style={styles.field}>
-                        <Text style={styles.label}>County</Text>
-                        {isEditing ? (
-                            <View style={styles.pickerContainer}>
-                                {counties.map(c => (
-                                    <TouchableOpacity
-                                        key={c.id}
-                                        style={[styles.chip, formData.county_id === c.id && styles.chipActive]}
-                                        onPress={() => setFormData({ ...formData, county_id: c.id, constituency_id: 0 })}
-                                    >
-                                        <Text style={[styles.chipText, formData.county_id === c.id && styles.chipTextActive]}>{c.name}</Text>
-                                    </TouchableOpacity>
-                                ))}
+                {!user?.is_admin && (
+                    <>
+                        <Text style={styles.sectionTitle}>{user?.role === 'LEADER' ? 'Representation Location' : 'Location Details'}</Text>
+                        <View style={styles.card}>
+                            <View style={styles.field}>
+                                <Text style={styles.label}>County</Text>
+                                {isEditing ? (
+                                    <View style={styles.pickerContainer}>
+                                        {counties.map(c => (
+                                            <TouchableOpacity
+                                                key={c.id}
+                                                style={[styles.chip, formData.county_id === c.id && styles.chipActive]}
+                                                onPress={() => setFormData({ ...formData, county_id: c.id, constituency_id: 0 })}
+                                            >
+                                                <Text style={[styles.chipText, formData.county_id === c.id && styles.chipTextActive]}>{c.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <Text style={styles.value}>{user?.role === 'LEADER' ? (leaderStats?.county_name || leaderStats?.county_id || 'National') : (user?.county_name || 'Not selected')}</Text>
+                                )}
                             </View>
-                        ) : (
-                            <Text style={styles.value}>{user?.county_name || 'Not selected'}</Text>
-                        )}
-                    </View>
 
-                    <View style={styles.field}>
-                        <Text style={styles.label}>Constituency</Text>
-                        {isEditing ? (
-                            <View style={styles.pickerContainer}>
-                                {constituencies.map(c => (
-                                    <TouchableOpacity
-                                        key={c.id}
-                                        style={[styles.chip, formData.constituency_id === c.id && styles.chipActive]}
-                                        onPress={() => setFormData({ ...formData, constituency_id: c.id })}
-                                    >
-                                        <Text style={[styles.chipText, formData.constituency_id === c.id && styles.chipTextActive]}>{c.name}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                                {!formData.county_id && <Text style={styles.placeholder}>Select a county first</Text>}
+                            <View style={styles.field}>
+                                <Text style={styles.label}>Constituency</Text>
+                                {isEditing ? (
+                                    <View style={styles.pickerContainer}>
+                                        {constituencies.map(c => (
+                                            <TouchableOpacity
+                                                key={c.id}
+                                                style={[styles.chip, formData.constituency_id === c.id && styles.chipActive]}
+                                                onPress={() => setFormData({ ...formData, constituency_id: c.id })}
+                                            >
+                                                <Text style={[styles.chipText, formData.constituency_id === c.id && styles.chipTextActive]}>{c.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                        {!formData.county_id && <Text style={styles.placeholder}>Select a county first</Text>}
+                                    </View>
+                                ) : (
+                                    <Text style={styles.value}>{user?.role === 'LEADER' ? (leaderStats?.constituency_name || leaderStats?.constituency_id || 'National') : (user?.constituency_name || 'Not selected')}</Text>
+                                )}
                             </View>
-                        ) : (
-                            <Text style={styles.value}>{user?.constituency_name || 'Not selected'}</Text>
-                        )}
-                    </View>
-                </View>
+                        </View>
+                    </>
+                )}
 
-                {/* Alert Settings Component */}
-                <AlertSettings token={token} />
+                {/* Alert Settings Component (Citizens Only) */}
+                {user?.role !== 'LEADER' && !user?.is_admin && <AlertSettings token={token} />}
             </View>
 
             {isEditing && (

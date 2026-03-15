@@ -26,9 +26,16 @@ class User(Base):
     # Notification preferences
     whatsapp_number = Column(String, nullable=True)
     push_token = Column(String, nullable=True)
+    
+    # Leader Verification Fields
+    role = Column(String, default="CITIZEN") # "CITIZEN" or "LEADER"
+    is_verified = Column(Boolean, default=False)
+    speaker_id = Column(Integer, ForeignKey("speakers.id"), nullable=True)
+    
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
 
     county = relationship("County")
     constituency = relationship("Constituency")
+    speaker = relationship("Speaker")
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")

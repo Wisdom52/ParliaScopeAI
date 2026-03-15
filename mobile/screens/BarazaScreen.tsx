@@ -135,6 +135,8 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
     const [pollType, setPollType] = useState('choice'); // choice, checkbox, boolean, text
     const [pollExpiresAt, setPollExpiresAt] = useState('');
     const [currentUserId, setCurrentUserId] = useState<number | null>(user?.id || null);
+    const [targetAudience, setTargetAudience] = useState('ALL');
+    const [visibilityScope, setVisibilityScope] = useState('GLOBAL');
 
     useEffect(() => {
         if (user) setCurrentUserId(user.id);
@@ -142,15 +144,23 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
     }, [user]);
 
     useEffect(() => {
+        if (user?.role === 'LEADER') {
+            if (activeSection === 'live' || activeSection === 'game') {
+                setActiveSection('meetings');
+            }
+        }
         fetchData();
         if (activeSection === 'game') fetchGamification();
-    }, [activeSection, difficultyFilter]);
+    }, [activeSection, difficultyFilter, user]);
 
     const fetchData = async () => {
         setLoading(true);
         try {
+            const token = await AsyncStorage.getItem('parliaScope_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
             if (activeSection === 'live') {
-                const res = await fetch(`${API_BASE_URL}/baraza/live/stream`);
+                const res = await fetch(`${API_BASE_URL}/baraza/live/stream`, { headers });
                 const data = await res.json();
                 if (data.channel_id) {
                     setLiveVid(`live_stream?channel=${data.channel_id}`);
@@ -162,12 +172,12 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                 const url = difficultyFilter !== 'all'
                     ? `${API_BASE_URL}/baraza/quizzes?difficulty=${difficultyFilter}`
                     : `${API_BASE_URL}/baraza/quizzes`;
-                const res = await fetch(url);
+                const res = await fetch(url, { headers });
                 const data = await res.json();
                 setQuizzes(Array.isArray(data) ? data : []);
             } else {
                 const endpoint = activeSection === 'forum' ? 'forum' : activeSection;
-                const res = await fetch(`${API_BASE_URL}/baraza/${endpoint}`);
+                const res = await fetch(`${API_BASE_URL}/baraza/${endpoint}`, { headers });
                 const data = await res.json();
                 if (activeSection === 'meetings') setMeetings(Array.isArray(data) ? data : []);
                 else if (activeSection === 'polls') setPolls(Array.isArray(data) ? data : []);
@@ -376,7 +386,12 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                     options: optionsData
                 };
             } else {
-                body = { title: newTitle, content: newDesc };
+                body = { 
+                    title: newTitle, 
+                    content: newDesc,
+                    target_audience: targetAudience,
+                    visibility_scope: visibilityScope
+                };
             }
 
             const method = editingMeeting ? 'PUT' : 'POST';
@@ -407,6 +422,8 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                 setPollOptions(['', '']);
                 setPollType('choice');
                 setPollExpiresAt('');
+                setTargetAudience('ALL');
+                setVisibilityScope('GLOBAL');
             } else {
                 const data = await res.json();
                 Alert.alert("Error", data.detail || "Failed to submit.");
@@ -812,7 +829,7 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
         <View style={styles.container}>
             <View style={styles.header}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabContainer}>
-                    {['meetings', 'polls', 'forum', 'live', 'game'].map((sec) => (
+                    {['meetings', 'polls', 'forum', 'live', 'game'].filter(sec => user?.role === 'LEADER' ? !['live', 'game'].includes(sec) : true).map((sec) => (
                         <TouchableOpacity
                             key={sec}
                             style={[styles.tab, activeSection === sec && styles.activeTab]}
@@ -925,73 +942,105 @@ export const BarazaScreen: React.FC<BarazaProps> = ({ onSwitchToProfile, user })
                             </TouchableOpacity>
                         </View>
 
-                        {showPollModal ? (
-                            <ScrollView style={{ maxHeight: 400 }}>
-                                <Text style={styles.label}>Poll Type</Text>
-                                <View style={styles.typeSelector}>
-                                    {['choice', 'checkbox', 'boolean'].map(t => (
-                                        <TouchableOpacity
-                                            key={t}
-                                            style={[styles.typeBtn, pollType === t && styles.typeBtnSelected]}
-                                            onPress={() => setPollType(t)}
-                                        >
-                                            <Text style={[styles.typeBtnText, pollType === t && styles.typeBtnTextSelected]}>
-                                                {t === 'choice' ? 'Single' : t === 'checkbox' ? 'Multi' : 'Yes/No'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-
-                                <TextInput style={styles.input} placeholder="Question" value={newQuestion} onChangeText={setNewQuestion} />
-
-                                {pollType !== 'boolean' && (
-                                    <>
-                                        {pollOptions.map((opt, i) => (
-                                            <View key={i} style={styles.pollOptionInputRow}>
-                                                <TextInput
-                                                    style={[styles.input, { flex: 1 }]}
-                                                    placeholder={`Option ${i + 1}`}
-                                                    value={opt}
-                                                    onChangeText={(val) => {
-                                                        const next = [...pollOptions];
-                                                        next[i] = val;
-                                                        setPollOptions(next);
-                                                    }}
-                                                />
-                                                {pollOptions.length > 2 && (
-                                                    <TouchableOpacity onPress={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))} style={styles.removeBtn}>
-                                                        <MaterialCommunityIcons name="close-circle" size={20} color="#dc2626" />
-                                                    </TouchableOpacity>
-                                                )}
-                                            </View>
-                                        ))}
-                                        <TouchableOpacity onPress={() => setPollOptions([...pollOptions, ''])}>
-                                            <Text style={{ color: '#007AFF', marginBottom: 15, fontWeight: '700' }}>+ Add Option</Text>
-                                        </TouchableOpacity>
-                                    </>
-                                )}
-
-                                <Text style={styles.label}>Expiration (YYYY-MM-DD HH:MM)</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. 2024-12-31 23:59"
-                                    value={pollExpiresAt}
-                                    onChangeText={setPollExpiresAt}
-                                />
-                            </ScrollView>
-                        ) : (
-                            <View>
-                                <TextInput style={styles.input} placeholder="Title" value={newTitle} onChangeText={setNewTitle} />
-                                <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} placeholder={showMeetingModal ? "Description" : "What's on your mind?"} value={newDesc} onChangeText={setNewDesc} multiline />
-                                {showMeetingModal && (
-                                    <>
-                                        <TextInput style={styles.input} placeholder="YYYY-MM-DDTHH:MM" value={newScheduledAt} onChangeText={setNewScheduledAt} />
-                                        <Text style={styles.formatHint}>Use format: 2024-03-25T14:30</Text>
-                                        <TextInput style={styles.input} placeholder="Meeting Link (Required)" value={newLink} onChangeText={setNewLink} />
-                                    </>
-                                )}
+                        <ScrollView style={{ maxHeight: 500 }}>
+                            <Text style={styles.label}>Who can Participate?</Text>
+                            <View style={styles.typeSelector}>
+                                {['ALL', 'LEADERS', 'CITIZENS'].map(a => (
+                                    <TouchableOpacity
+                                        key={a}
+                                        style={[styles.typeBtn, targetAudience === a && styles.typeBtnSelected]}
+                                        onPress={() => setTargetAudience(a)}
+                                    >
+                                        <Text style={[styles.typeBtnText, targetAudience === a && styles.typeBtnTextSelected]}>
+                                            {a === 'ALL' ? 'Everyone' : a === 'LEADERS' ? 'Leaders' : 'Citizens'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
                             </View>
-                        )}
+
+                            <Text style={styles.label}>Visibility Scope</Text>
+                            <View style={styles.typeSelector}>
+                                {['GLOBAL', 'REGIONAL'].map(v => (
+                                    <TouchableOpacity
+                                        key={v}
+                                        style={[styles.typeBtn, visibilityScope === v && styles.typeBtnSelected]}
+                                        onPress={() => setVisibilityScope(v)}
+                                    >
+                                        <Text style={[styles.typeBtnText, visibilityScope === v && styles.typeBtnTextSelected]}>
+                                            {v === 'GLOBAL' ? 'Global' : 'Local'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            {showPollModal ? (
+                                <>
+                                    <Text style={styles.label}>Poll Type</Text>
+                                    <View style={styles.typeSelector}>
+                                        {['choice', 'checkbox', 'boolean'].map(t => (
+                                            <TouchableOpacity
+                                                key={t}
+                                                style={[styles.typeBtn, pollType === t && styles.typeBtnSelected]}
+                                                onPress={() => setPollType(t)}
+                                            >
+                                                <Text style={[styles.typeBtnText, pollType === t && styles.typeBtnTextSelected]}>
+                                                    {t === 'choice' ? 'Single' : t === 'checkbox' ? 'Multi' : 'Yes/No'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+
+                                    <TextInput style={styles.input} placeholder="Question" value={newQuestion} onChangeText={setNewQuestion} />
+
+                                    {pollType !== 'boolean' && (
+                                        <>
+                                            {pollOptions.map((opt, i) => (
+                                                <View key={i} style={styles.pollOptionInputRow}>
+                                                    <TextInput
+                                                        style={[styles.input, { flex: 1 }]}
+                                                        placeholder={`Option ${i + 1}`}
+                                                        value={opt}
+                                                        onChangeText={(val) => {
+                                                            const next = [...pollOptions];
+                                                            next[i] = val;
+                                                            setPollOptions(next);
+                                                        }}
+                                                    />
+                                                    {pollOptions.length > 2 && (
+                                                        <TouchableOpacity onPress={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))} style={styles.removeBtn}>
+                                                            <MaterialCommunityIcons name="close-circle" size={20} color="#dc2626" />
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </View>
+                                            ))}
+                                            <TouchableOpacity onPress={() => setPollOptions([...pollOptions, ''])}>
+                                                <Text style={{ color: '#007AFF', marginBottom: 15, fontWeight: '700' }}>+ Add Option</Text>
+                                            </TouchableOpacity>
+                                        </>
+                                    )}
+
+                                    <Text style={styles.label}>Expiration (YYYY-MM-DD HH:MM)</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="e.g. 2024-12-31 23:59"
+                                        value={pollExpiresAt}
+                                        onChangeText={setPollExpiresAt}
+                                    />
+                                </>
+                            ) : (
+                                <View>
+                                    <TextInput style={styles.input} placeholder="Title" value={newTitle} onChangeText={setNewTitle} />
+                                    <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} placeholder={showMeetingModal ? "Description" : "What's on your mind?"} value={newDesc} onChangeText={setNewDesc} multiline />
+                                    {showMeetingModal && (
+                                        <>
+                                            <TextInput style={styles.input} placeholder="YYYY-MM-DDTHH:MM" value={newScheduledAt} onChangeText={setNewScheduledAt} />
+                                            <Text style={styles.formatHint}>Use format: 2024-03-25T14:30</Text>
+                                            <TextInput style={styles.input} placeholder="Meeting Link (Required)" value={newLink} onChangeText={setNewLink} />
+                                        </>
+                                    )}
+                                </View>
+                            )}
+                        </ScrollView>
                         <TouchableOpacity style={styles.submitBtn} onPress={handleCreatePost}>
                             <Text style={styles.submitBtnText}>Submit</Text>
                         </TouchableOpacity>

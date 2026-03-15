@@ -12,6 +12,10 @@ interface User {
     whatsapp_number?: string | null;
     push_token?: string | null;
     is_admin: boolean;
+    role: 'CITIZEN' | 'LEADER';
+    speaker_id: number | null;
+    is_verified: boolean;
+    is_active: boolean;
 }
 
 interface AuthContextType {

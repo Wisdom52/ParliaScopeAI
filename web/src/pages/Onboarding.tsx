@@ -11,8 +11,8 @@ interface Props {
 }
 
 export const Onboarding: React.FC<Props> = ({ onComplete }) => {
-    const { login: saveToken } = useAuth();
-    const [mode, setMode] = useState<'signup' | 'login'>('login');
+    const { login: saveToken, token } = useAuth();
+    const [mode, setMode] = useState<'signup' | 'login' | 'leader_claim'>('login');
     const [formData, setFormData] = useState<any>({
         county_id: 0,
         constituency_id: 0,
@@ -32,6 +32,27 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
     const [showCountyResults, setShowCountyResults] = useState(false);
     const [showConstituencyResults, setShowConstituencyResults] = useState(false);
     const [errors, setErrors] = useState<any>({});
+
+    const [speakers, setSpeakers] = useState<any[]>([]);
+    const [speakerSearch, setSpeakerSearch] = useState('');
+    const [selectedSpeaker, setSelectedSpeaker] = useState<any>(null);
+    const [showSpeakerResults, setShowSpeakerResults] = useState(false);
+    const [leaderClaimData, setLeaderClaimData] = useState({
+        maisha_namba: '',
+        staff_id: '',
+        maisha_card_url: 'uploads/maisha_mock.jpg', // Default mock
+        staff_card_url: 'uploads/staff_mock.jpg' // Default mock
+    });
+    const [maishaFile, setMaishaFile] = useState<File | null>(null);
+    const [staffFile, setStaffFile] = useState<File | null>(null);
+    const maishaInputRef = React.useRef<HTMLInputElement>(null);
+    const staffInputRef = React.useRef<HTMLInputElement>(null);
+
+    const [leaderRegistration, setLeaderRegistration] = useState({
+        email: '',
+        password: '',
+        full_name: ''
+    });
 
     const [showPassword, setShowPassword] = useState(false);
     const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
@@ -58,6 +79,11 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
             .then(res => res.json())
             .then(data => setCounties(data))
             .catch(err => console.error("Failed to fetch counties", err));
+
+        fetch('http://localhost:8000/representatives')
+            .then(res => res.json())
+            .then(data => setSpeakers(data))
+            .catch(err => console.error("Failed to fetch speakers", err));
     }, []);
 
     useEffect(() => {
@@ -153,6 +179,78 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
         }
     };
 
+    const handleLeaderClaim = async () => {
+        if (!selectedSpeaker) {
+            setErrors({ submit: 'Please select your official profile.' });
+            return;
+        }
+        if (!leaderClaimData.maisha_namba || !leaderClaimData.staff_id) {
+            setErrors({ submit: 'Matching ID numbers are required for verification.' });
+            return;
+        }
+
+        if (!maishaFile || !staffFile) {
+            setErrors({ submit: 'For security, you MUST upload photos of your Maisha Card and Staff ID to proceed.' });
+            return;
+        }
+
+        let currentToken = token;
+
+        // Shortened Process: If not logged in, register them first
+        if (!currentToken) {
+            if (!leaderRegistration.email || !leaderRegistration.password || !leaderRegistration.full_name) {
+                setErrors({ submit: 'Please provide account details to secure your profile.' });
+                return;
+            }
+            try {
+                // Determine location for leader (Kenya/Nairobi default for representatives if unknown)
+                const signupRes = await fetch(`http://localhost:8000/auth/signup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...leaderRegistration,
+                        id_number: leaderClaimData.maisha_namba,
+                        county_id: 47, // Default to Nairobi for leaders if not specified
+                        constituency_id: 288 // Default for leaders demo
+                    }),
+                });
+                const signupData = await signupRes.json();
+                if (!signupRes.ok) {
+                    setErrors({ submit: signupData.detail || 'Account creation failed.' });
+                    return;
+                }
+                saveToken(signupData.access_token);
+                currentToken = signupData.access_token;
+            } catch (err) {
+                setErrors({ submit: 'Failed to create leader account.' });
+                return;
+            }
+        }
+
+        try {
+            const response = await fetch(`http://localhost:8000/auth/claim-leader`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${currentToken}` 
+                },
+                body: JSON.stringify({
+                    speaker_id: selectedSpeaker.id,
+                    ...leaderClaimData
+                }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert("Identity verified! Your claim is now pending manual review by an admin.");
+                onComplete();
+            } else {
+                setErrors({ submit: data.detail || 'Claim failed. Check your ID numbers.' });
+            }
+        } catch (err) {
+            setErrors({ submit: 'Connection error during verification.' });
+        }
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent, type: 'county' | 'constituency') => {
         if (e.key === 'Enter') {
             if (type === 'county') setShowCountyResults(false);
@@ -199,8 +297,11 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                     <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
                         Don't have an account? <button onClick={() => setMode('signup')} style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Sign Up</button>
                     </p>
+                    <p style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
+                        Are you a Leader? <button onClick={() => setMode('leader_claim')} style={{ color: 'var(--secondary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Claim Official Profile</button>
+                    </p>
                 </div>
-            ) : (
+            ) : mode === 'signup' ? (
                 <div className="auth-step">
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                         <Input
@@ -344,7 +445,120 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                         initialLocation={formData.latitude ? { lat: formData.latitude, lng: formData.longitude } : undefined}
                     />
                 </div>
-            )}
+            ) : mode === 'leader_claim' ? (
+                <div className="auth-step">
+                    <p style={{ marginBottom: '1.5rem', fontSize: '0.95rem', color: '#666' }}>
+                        Identify yourself from the official parliamentary list to claim your profile.
+                    </p>
+
+                    {!token && (
+                        <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                            <p style={{ fontSize: '0.85rem', marginBottom: '0.75rem', fontWeight: 600 }}>Create Your Official Account</p>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                                <Input
+                                    label="Official Full Name"
+                                    value={leaderRegistration.full_name}
+                                    onChangeText={(text) => setLeaderRegistration({...leaderRegistration, full_name: text})}
+                                    placeholder="e.g. Hon. Waweru Waweru"
+                                />
+                                <Input
+                                    label="Official Email"
+                                    value={leaderRegistration.email}
+                                    onChangeText={(text) => setLeaderRegistration({...leaderRegistration, email: text})}
+                                    placeholder="leader@parliament.go.ke"
+                                />
+                                <Input
+                                    label="Secure Password"
+                                    secureTextEntry={!showPassword}
+                                    value={leaderRegistration.password}
+                                    onChangeText={(text) => setLeaderRegistration({...leaderRegistration, password: text})}
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
+                        <Input
+                            label="Select Your Official Name"
+                            required
+                            value={speakerSearch}
+                            onChangeText={(text) => {
+                                setSpeakerSearch(text);
+                                setShowSpeakerResults(true);
+                            }}
+                            onFocus={() => setShowSpeakerResults(true)}
+                            onBlur={() => setTimeout(() => setShowSpeakerResults(false), 250)}
+                            placeholder="Search your name..."
+                        />
+                        {showSpeakerResults && speakerSearch && (
+                            <div className="dropdown" style={{ position: 'absolute', width: '100%', zIndex: 30, background: 'white', border: '1px solid var(--border)', borderRadius: '8px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 10px rgba(0,0,0,0.15)' }}>
+                                {speakers.filter(s => s.name.toLowerCase().includes(speakerSearch.toLowerCase())).map(s => (
+                                    <div key={s.id} onClick={() => { setSelectedSpeaker(s); setSpeakerSearch(s.name); setShowSpeakerResults(false); }} style={{ padding: '10px 15px', cursor: 'pointer', borderBottom: '1px solid #eee' }}>
+                                        <strong>{s.name}</strong><br/><small>{s.role}</small>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <Input
+                            label="Maisha Namba"
+                            required
+                            value={leaderClaimData.maisha_namba}
+                            onChangeText={(text) => setLeaderClaimData({...leaderClaimData, maisha_namba: text})}
+                            placeholder="Enter Number"
+                        />
+                        <Input
+                            label="Staff / Member ID"
+                            required
+                            value={leaderClaimData.staff_id}
+                            onChangeText={(text) => setLeaderClaimData({...leaderClaimData, staff_id: text})}
+                            placeholder="Enter Member ID"
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '1.5rem', background: '#f8f9fa', padding: '1rem', borderRadius: '8px', border: '1px dashed #ccc' }}>
+                        <p style={{ fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>Verification Evidence</p>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <input 
+                                type="file" 
+                                ref={maishaInputRef} 
+                                style={{ display: 'none' }} 
+                                onChange={(e) => setMaishaFile(e.target.files?.[0] || null)}
+                            />
+                            <input 
+                                type="file" 
+                                ref={staffInputRef} 
+                                style={{ display: 'none' }} 
+                                onChange={(e) => setStaffFile(e.target.files?.[0] || null)}
+                            />
+                            
+                            <div 
+                                onClick={() => maishaInputRef.current?.click()}
+                                style={{ flex: 1, height: '70px', background: maishaFile ? '#e3f2fd' : '#eee', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', textAlign: 'center', cursor: 'pointer', padding: '4px' }}
+                            >
+                                {maishaFile ? `Selected: ${maishaFile.name}` : "Upload Maisha Card Photo"}
+                            </div>
+                            <div 
+                                onClick={() => staffInputRef.current?.click()}
+                                style={{ flex: 1, height: '70px', background: staffFile ? '#e3f2fd' : '#eee', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', textAlign: 'center', cursor: 'pointer', padding: '4px' }}
+                            >
+                                {staffFile ? `Selected: ${staffFile.name}` : "Upload Staff ID Photo"}
+                            </div>
+                        </div>
+                    </div>
+
+                    {errors.submit && <p style={{ color: 'red', textAlign: 'center', marginBottom: '1rem' }}>{errors.submit}</p>}
+                    
+                    <Button label="Submit Official Claim" onPress={handleLeaderClaim} />
+                    
+                    <button onClick={() => setMode('login')} style={{ width: '100%', marginTop: '1rem', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        Back to Login
+                    </button>
+                </div>
+            ) : null}
         </div>
     );
 };

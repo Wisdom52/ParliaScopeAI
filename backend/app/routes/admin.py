@@ -6,6 +6,9 @@ import os
 from app.database import get_db
 from app.models.user import User
 from app.models.system import AdminNotification
+from app.models.bill import Bill
+from app.models.hansard import Hansard
+from app.models.baraza import BarazaMeeting, BarazaPoll, BarazaForumPost, BarazaLiveChat, BarazaLivePulse
 from app.schemas import User as UserRead
 from app.routes.auth import get_current_admin_user
 from app.core.logger import logger
@@ -23,6 +26,60 @@ def list_users(
     """
     logger.info(f"Admin {admin.email} requested user list.")
     return db.query(User).all()
+
+@router.get("/dashboard/stats")
+def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Retrieve system-wide aggregated statistics for the Admin Dashboard.
+    Pulling real data from the database tables.
+    """
+    # User Stats
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    paused_users = total_users - active_users
+    total_leaders = db.query(User).filter(User.role == "LEADER").count()
+    total_admins = db.query(User).filter(User.is_admin == True).count()
+    total_citizens = db.query(User).filter(User.role == "CITIZEN").count()
+
+    # Content Stats
+    total_bills = db.query(Bill).count()
+    total_hansards = db.query(Hansard).count()
+
+    # Baraza Stats
+    total_meetings = db.query(BarazaMeeting).count()
+    total_polls = db.query(BarazaPoll).count()
+    total_posts = db.query(BarazaForumPost).count()
+    
+    # Live Stream Engagement
+    total_live_chats = db.query(BarazaLiveChat).count()
+    total_pulse_reactions = db.query(BarazaLivePulse).count()
+
+    return {
+        "users": {
+            "total": total_users,
+            "citizens": total_citizens,
+            "leaders": total_leaders,
+            "admins": total_admins,
+            "active": active_users,
+            "paused": paused_users
+        },
+        "content": {
+            "bills": total_bills,
+            "hansard_sessions": total_hansards
+        },
+        "baraza": {
+            "meetings": total_meetings,
+            "polls": total_polls,
+            "forum_posts": total_posts
+        },
+        "live_stream": {
+            "chats": total_live_chats,
+            "reactions": total_pulse_reactions
+        }
+    }
 
 @router.get("/logs")
 def get_logs(
