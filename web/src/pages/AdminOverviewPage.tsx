@@ -35,13 +35,7 @@ export const AdminOverviewPage: React.FC = () => {
 
     return (
         <div className="admin-container">
-            <header className="admin-header" style={{ padding: '2rem' }}>
-                <div className="admin-title">
-                    <Activity className="admin-title-icon" />
-                    <h1>System Overview</h1>
-                </div>
-                <p className="admin-subtitle">High-level analytics and engagement metrics.</p>
-            </header>
+
 
             <div className="admin-content" style={{ padding: '0 2rem 2rem 2rem' }}>
                 {loading ? (
