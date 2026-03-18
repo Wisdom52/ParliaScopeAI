@@ -4,6 +4,7 @@ interface User {
     id: number;
     email: string | null;
     full_name: string | null;
+    display_name?: string | null;
     id_number: string | null;
     county_id: number | null;
     constituency_id: number | null;
@@ -12,6 +13,7 @@ interface User {
     whatsapp_number?: string | null;
     push_token?: string | null;
     is_admin: boolean;
+    is_anonymous_default?: boolean;
     role: 'CITIZEN' | 'LEADER';
     speaker_id: number | null;
     is_verified: boolean;

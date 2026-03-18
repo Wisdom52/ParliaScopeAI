@@ -35,7 +35,8 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
         # 1. Create Bill record
         bill = Bill(
             title=link['title'],
-            document_url=link['url']
+            document_url=link['url'],
+            date=link.get('date')  # Realistic date parsed from title/URL by scraper
         )
         db.add(bill)
         db.commit()
@@ -57,20 +58,26 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
                             # Generate AI-powered structured bill summary
                             logger.info(f"Generating AI summary for Bill: {link['title']}")
                             bill.summary = await generate_bill_summary(raw_text)
+                            db.commit() # Save summary early
                             
-                            # Generate impacts
-                            impacts_data = generate_bill_impact(raw_text[:8000]) # Use first 8k chars for impact analysis
-                            for imp in impacts_data:
-                                new_impact = BillImpact(
-                                    bill_id=bill.id,
-                                    archetype=imp.get('archetype'),
-                                    description=imp.get('description'),
-                                    sentiment=imp.get('sentiment')
-                                )
-                                db.add(new_impact)
-                            
-                            db.commit()
-                            ingested.append({"title": link['title'], "impacts": len(impacts_data)})
+                            # Generate impacts safely
+                            try:
+                                impacts_data = generate_bill_impact(raw_text[:8000]) # Use first 8k chars for impact analysis
+                                for imp in impacts_data:
+                                    new_impact = BillImpact(
+                                        bill_id=bill.id,
+                                        archetype=imp.get('archetype', 'General'),
+                                        description=imp.get('description', 'None'),
+                                        sentiment=imp.get('sentiment', 'Neutral')
+                                    )
+                                    db.add(new_impact)
+                                
+                                db.commit()
+                                ingested.append({"title": link['title'], "impacts": len(impacts_data)})
+                            except Exception as impact_err:
+                                logger.error(f"Impact Analysis failed for {link['title']}: {impact_err}")
+                                db.rollback()
+                                ingested.append({"title": link['title'], "impacts": 0})
                     except Exception as e:
                         logger.error(f"Error during Impact Analysis of {link['title']}: {e}")
                     finally:
@@ -109,7 +116,8 @@ async def perform_hansard_crawl(db: Session, limit: int = 6, ai_parsing: bool = 
         # 1. Create Hansard record
         hansard = Hansard(
             title=link['title'],
-            pdf_url=link['url']
+            pdf_url=link['url'],
+            date=link.get('date')  # Realistic date parsed from the document title by scraper
         )
         db.add(hansard)
         db.commit()

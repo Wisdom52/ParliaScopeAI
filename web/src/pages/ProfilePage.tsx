@@ -31,7 +31,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
         county_id: 0,
         constituency_id: 0,
         whatsapp_number: '',
-        push_token: ''
+        push_token: '',
+        display_name: '',
+        is_anonymous_default: false
     });
     const [counties, setCounties] = useState<any[]>([]);
     const [constituencies, setConstituencies] = useState<Constituency[]>([]);
@@ -48,7 +50,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                 county_id: user.county_id || 0,
                 constituency_id: user.constituency_id || 0,
                 whatsapp_number: user.whatsapp_number || '',
-                push_token: user.push_token || ''
+                push_token: user.push_token || '',
+                display_name: user.display_name || '',
+                is_anonymous_default: user.is_anonymous_default || false
             });
         }
     }, [user]);
@@ -274,6 +278,57 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
 
                 {/* Alert Settings Module (Citizens only) */}
                 {user.role !== 'LEADER' && !user.is_admin && <AlertSettings />}
+
+                {/* Privacy Settings Module (Citizens only - D1 Plan) */}
+                {user.role !== 'LEADER' && !user.is_admin && (
+                    <div className="card" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)' }}>
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem', fontSize: '1.1rem', color: 'var(--primary)' }}>
+                            <Shield size={20} /> Baraza Privacy Settings
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>Public Display Name (Pseudonym)</label>
+                                {isEditing ? (
+                                    <Input 
+                                        value={formData.display_name} 
+                                        onChangeText={(text) => setFormData({ ...formData, display_name: text })} 
+                                        placeholder="e.g. Concerned Citizen 001"
+                                    />
+                                ) : (
+                                    <p style={{ fontWeight: 600 }}>{user.display_name || 'Not configured'}</p>
+                                )}
+                                <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>Used when you choose to hide your real full name.</p>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <div>
+                                    <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Post Anonymously by Default</p>
+                                    <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>Hide your real name on public Baraza posts</p>
+                                </div>
+                                <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={isEditing ? formData.is_anonymous_default : user.is_anonymous_default}
+                                        onChange={(e) => isEditing && setFormData({ ...formData, is_anonymous_default: e.target.checked })}
+                                        disabled={!isEditing}
+                                        style={{ opacity: 0, width: 0, height: 0 }}
+                                    />
+                                    <span style={{
+                                        position: 'absolute', cursor: isEditing ? 'pointer' : 'default', top: 0, left: 0, right: 0, bottom: 0, 
+                                        backgroundColor: (isEditing ? formData.is_anonymous_default : user.is_anonymous_default) ? 'var(--primary)' : '#ccc', 
+                                        transition: '.4s', borderRadius: '34px'
+                                    }}>
+                                        <span style={{
+                                            position: 'absolute', content: '""', height: '16px', width: '16px', left: '4px', bottom: '4px', backgroundColor: 'white', 
+                                            transition: '.4s', borderRadius: '50%',
+                                            transform: (isEditing ? formData.is_anonymous_default : user.is_anonymous_default) ? 'translateX(20px)' : 'translateX(0)'
+                                        }} />
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Civic Passport (Citizens only) */}
                 {user.role !== 'LEADER' && !user.is_admin && (

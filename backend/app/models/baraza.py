@@ -14,6 +14,7 @@ class BarazaMeeting(Base):
     # host_id can be a User ID who is a leader, or linked to a Speaker
     host_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     speaker_id = Column(Integer, ForeignKey("speakers.id"), nullable=True)
+    is_anonymous = Column(Boolean, default=False)
     
     # Granular Controls
     target_audience = Column(String, default="ALL") # ALL, LEADERS, CITIZENS
@@ -35,6 +36,7 @@ class BarazaPoll(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     is_active = Column(Boolean, default=True)
+    is_anonymous = Column(Boolean, default=False)
     
     # Granular Controls
     target_audience = Column(String, default="ALL") # ALL, LEADERS, CITIZENS
@@ -75,6 +77,7 @@ class BarazaForumPost(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_anonymous = Column(Boolean, default=False)
     
     # Granular Controls
     target_audience = Column(String, default="ALL") # ALL, LEADERS, CITIZENS
@@ -94,6 +97,7 @@ class BarazaForumComment(Base):
     post_id = Column(Integer, ForeignKey("baraza_forum_posts.id", ondelete="CASCADE"), nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
+    is_anonymous = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     post = relationship("BarazaForumPost", back_populates="comments")

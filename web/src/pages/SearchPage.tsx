@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
-import { Loader2, FileText, Activity, Send, MessageSquare, Search, X, Shield } from 'lucide-react';
+import { Loader2, FileText, Activity, Send, MessageSquare, Search, X, Shield, Headphones } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { AudioPlayer } from '../components/ui/AudioPlayer';
 
 interface Hansard {
     id: number;
     title: string;
     pdf_url: string;
     ai_summary: string | null;
+    date: string | null;
     created_at: string;
 }
 
@@ -15,6 +17,7 @@ interface Bill {
     id: number;
     title: string;
     summary: string;
+    date: string | null;
     document_url: string;
     impacts: any[];
 }
@@ -53,6 +56,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
     const [selectedHansard, setSelectedHansard] = useState<Hansard | null>(null);
     const [activeCategory, setActiveCategory] = useState<'parliament' | 'bills' | 'shield'>('parliament');
 
+    // Audio-First State
+    const [audioData, setAudioData] = useState<{ en: string, sw: string } | null>(null);
+    const [loadingAudio, setLoadingAudio] = useState(false);
+
     // Bills State
     const [bills, setBills] = useState<Bill[]>([]);
     const [billsLoading, setBillsLoading] = useState(false);
@@ -72,7 +79,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
     const fetchDocs = async () => {
         setDocsLoading(true);
         try {
-            const res = await fetch('http://localhost:8000/docs/');
+            const res = await fetch('http://localhost:8000/hansards/');
             if (res.ok) setDocuments(await res.json());
         } catch (e: any) {
             console.error("Docs fetch failed", e);
@@ -169,6 +176,35 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
             setChatMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);
         } finally {
             setChatLoading(false);
+        }
+    };
+
+    // Close Modal Helper
+    const handleCloseModal = () => {
+        setSelectedHansard(null);
+        setAudioData(null); // Reset audio state
+        setChatMessages([]);
+    };
+
+    const fetchAudio = async (docId: number, docType: 'hansard' | 'bill') => {
+        if (audioData) return;
+        setLoadingAudio(true);
+        try {
+            const [enRes, swRes] = await Promise.all([
+                fetch(`http://localhost:8000/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=en`),
+                fetch(`http://localhost:8000/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=sw`)
+            ]);
+            if (enRes.ok && swRes.ok) {
+                const enData = await enRes.json();
+                const swData = await swRes.json();
+                if (enData.audio_url && swData.audio_url) {
+                    setAudioData({ en: enData.audio_url, sw: swData.audio_url });
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load audio", err);
+        } finally {
+            setLoadingAudio(false);
         }
     };
 
@@ -312,14 +348,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                     <div
                                         key={doc.id}
                                         className="doc-card"
-                                        onClick={() => { setSelectedHansard(doc); setChatMessages([]); }}
+                                        onClick={() => { setSelectedHansard(doc); setChatMessages([]); setAudioData(null); }}
                                         style={{ padding: '1.25rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'white', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
                                         onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                                         onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                             <div style={{ padding: '0.5rem', background: '#F0F9FF', borderRadius: '10px' }}><FileText size={20} color="#007AFF" /></div>
-                                            <span style={{ fontSize: '0.75rem', color: '#888' }}>{new Date(doc.created_at).toLocaleDateString()}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#888' }}>{doc.date ? new Date(doc.date).toLocaleDateString() : 'N/A'}</span>
                                         </div>
                                         <div style={{ fontWeight: '700', fontSize: '1rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>{doc.title}</div>
                                         <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -356,14 +392,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                     <div
                                         key={bill.id}
                                         className="doc-card"
-                                        onClick={() => { setSelectedHansard({ id: bill.id, title: bill.title, ai_summary: bill.summary, created_at: '', pdf_url: bill.document_url }); setChatMessages([]); }}
+                                        onClick={() => { setSelectedHansard({ id: bill.id, title: bill.title, ai_summary: bill.summary, date: '', created_at: '', pdf_url: bill.document_url }); setChatMessages([]); setAudioData(null); }}
                                         style={{ padding: '1.25rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'white', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
                                         onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                                         onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                             <div style={{ padding: '0.5rem', background: '#FFF7ED', borderRadius: '10px' }}><Activity size={20} color="#F97316" /></div>
-                                            <span style={{ fontSize: '0.75rem', color: '#888', background: '#f0fdf4', padding: '0.2rem 0.6rem', borderRadius: '1rem', fontWeight: '600' }}>Bill</span>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontSize: '0.75rem', color: '#888', background: '#f0fdf4', padding: '0.2rem 0.6rem', borderRadius: '1rem', fontWeight: '600', display: 'inline-block', marginBottom: '0.25rem' }}>Bill</div>
+                                                <div style={{ fontSize: '0.7rem', color: '#999' }}>{bill.date ? new Date(bill.date).toLocaleDateString() : 'N/A'}</div>
+                                            </div>
                                         </div>
                                         <div style={{ fontWeight: '700', fontSize: '1rem', marginBottom: '0.5rem', color: '#1a1a1a', lineHeight: '1.4' }}>{bill.title}</div>
                                         <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -482,7 +521,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                         <h2 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0, color: '#1a1a1a' }}>{selectedHansard.title}</h2>
                                         <span style={{ fontSize: '0.85rem', color: '#666' }}>AI Document Analysis Hub</span>
                                     </div>
-                                    <button style={{ background: '#f5f5f5', border: 'none', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedHansard(null)}><X size={20} /></button>
+                                    <button style={{ background: '#f5f5f5', border: 'none', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={handleCloseModal}><X size={20} /></button>
                                 </div>
 
                                 {/* Modal Content - Dual Pane */}
@@ -544,6 +583,53 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                                 System is still generating the summary for this document. Please check back in a few moments.
                                             </div>
                                         )}
+
+                                        {/* Traceable source link */}
+                                        {selectedHansard.pdf_url && (
+                                            <div style={{
+                                                marginTop: '1.5rem',
+                                                padding: '0.75rem 1rem',
+                                                background: '#f0f4ff',
+                                                borderLeft: '3px solid var(--primary)',
+                                                borderRadius: '6px',
+                                                fontSize: '0.85rem',
+                                                color: '#444'
+                                            }}>
+                                                ⚠️ <strong>AI-Generated Summary</strong> — Always verify against the official source.
+                                                <br />
+                                                <a
+                                                    href={selectedHansard.pdf_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'underline', display: 'inline-block', marginTop: '0.3rem' }}
+                                                >
+                                                    📄 View Original PDF on parliament.go.ke
+                                                </a>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Audio-First Engagement UI */}
+                                        <div style={{ marginTop: '2rem', marginBottom: '1.5rem', background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                            <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#334155' }}>
+                                                <Headphones size={18} color="var(--primary)" />
+                                                Audio-First Engagement
+                                            </h3>
+                                            {!audioData ? (
+                                                <div style={{ maxWidth: '300px' }}>
+                                                    <Button 
+                                                        label="Generate & Listen to Audio Summary" 
+                                                        variant="outline" 
+                                                        onPress={() => fetchAudio(selectedHansard.id, activeCategory === 'bills' ? 'bill' : 'hansard')} 
+                                                        loading={loadingAudio} 
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    <AudioPlayer src={audioData.en} title="🇬🇧 English Brief" />
+                                                    <AudioPlayer src={audioData.sw} title="🇰🇪 Swahili Brief (Kiswahili)" />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Right Pane: Chat */}

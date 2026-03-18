@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, TIMESTAMP, Date
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -10,6 +10,7 @@ class Bill(Base):
     title = Column(String, index=True, nullable=False)
     summary = Column(Text, nullable=True)
     document_url = Column(String, nullable=True)
+    date = Column(Date, nullable=True)  # Realistic publication date parsed from document title
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     # Relationships

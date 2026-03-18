@@ -5,7 +5,7 @@ from app.models.hansard import Hansard
 from app import schemas
 from typing import List
 
-router = APIRouter(prefix="/docs", tags=["Documents"])
+router = APIRouter(prefix="/hansards", tags=["Hansards"])
 
 @router.get("/", response_model=List[schemas.Hansard])
 def list_documents(db: Session = Depends(get_db)):

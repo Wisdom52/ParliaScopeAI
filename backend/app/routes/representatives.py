@@ -60,7 +60,10 @@ def get_representative(id: int, db: Session = Depends(get_db)):
     # Add user names to reviews
     for review in rep.reviews:
         user = db.query(User).filter(User.id == review.user_id).first()
-        review.user_name = user.full_name if user else "Anonymous Citizen"
+        if user and user.is_anonymous_default:
+            review.user_name = "Anonymous Citizen"
+        else:
+            review.user_name = (user.display_name or user.full_name) if user else "Anonymous Citizen"
 
     # Dynamic area name resolution
     if not rep.county_name and rep.county_id:
@@ -99,5 +102,5 @@ def create_review(
     db.commit()
     db.refresh(db_review)
     
-    db_review.user_name = current_user.full_name
+    db_review.user_name = "Anonymous Citizen" if current_user.is_anonymous_default else (current_user.display_name or current_user.full_name)
     return db_review

@@ -9,6 +9,7 @@ from app.services.embedding import get_embedding
 import ollama
 from typing import List, Optional
 from app.core.logger import logger
+from app.services.scraper import extract_text_from_url
 from app.core.security_utils import rate_limit
 from app.routes.auth import get_current_user_optional
 from app.models.user import User
@@ -24,9 +25,34 @@ async def verify_claim(
     raw_request: Request = None # Needed for rate_limit
 ):
     query = req.claim_text or ""
-    if req.url and not query:
-        # If only URL is provided, we use it as a keyword hint for now
-        query = req.url 
+    
+    # 0. URL Scraping and Claim Extraction
+    if req.url:
+        logger.info(f"Fact-Shield: Scraping URL {req.url}")
+        scraped_text = extract_text_from_url(req.url)
+        if scraped_text:
+            if not query:
+                # Use AI to summarize the scraped text into a claim
+                extraction_prompt = f"""
+                Extract the central factual claim or primary argument from the following web content.
+                Focus on parliamentary, legal, or political claims about Kenya if present.
+                Output ONLY the extracted claim in one or two clear sentences.
+                
+                CONTENT:
+                {scraped_text[:3000]}
+                """
+                try:
+                    extraction_resp = ollama.chat(model='llama3.2:3b', messages=[
+                        {'role': 'user', 'content': extraction_prompt},
+                    ])
+                    query = extraction_resp['message']['content'].strip()
+                    logger.info(f"Fact-Shield: Extracted claim from URL: '{query}'")
+                except Exception as e:
+                    logger.error(f"Fact-Shield: Failed to extract claim via AI: {e}")
+                    query = req.url # Fallback
+            else:
+                # Add scraped context to the verification if query exists
+                query = f"{query} (Context from {req.url}: {scraped_text[:500]}...)"
 
     if not query:
         logger.warning("Fact-Shield verification blocked: missing claim text or URL.")

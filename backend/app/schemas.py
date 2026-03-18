@@ -31,18 +31,21 @@ class TokenData(BaseModel):
 
 class User(UserBase):
     id: int
-    full_name: Optional[str]
-    id_number: Optional[str]
-    county_id: Optional[int]
-    constituency_id: Optional[int]
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    is_anonymous_default: Optional[bool] = False
+    id_number: Optional[str] = None
+    county_id: Optional[int] = None
+    constituency_id: Optional[int] = None
     county_name: Optional[str] = None
     constituency_name: Optional[str] = None
-    latitude: Optional[float]
-    longitude: Optional[float]
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     whatsapp_number: Optional[str] = None
     push_token: Optional[str] = None
-    is_admin: bool = False
-    is_active: bool = True
+    is_admin: Optional[bool] = False
+    is_active: Optional[bool] = True
+    is_verified: Optional[bool] = False
     role: str = "CITIZEN"
     speaker_id: Optional[int] = None
 
@@ -51,6 +54,8 @@ class User(UserBase):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    is_anonymous_default: Optional[bool] = None
     id_number: Optional[str] = None
     county_id: Optional[int] = None
     constituency_id: Optional[int] = None
@@ -60,10 +65,11 @@ class UserUpdate(BaseModel):
     push_token: Optional[str] = None
 
 from datetime import date, datetime
+import datetime as dt
 
 class HansardBase(BaseModel):
     title: str
-    date: Optional[date] = None
+    date: Optional[dt.date] = None
     pdf_url: Optional[str] = None
     ai_summary: Optional[str] = None
 
@@ -112,6 +118,7 @@ class BillImpactOut(BillImpactBase):
 
 class BillBase(BaseModel):
     title: str
+    date: Optional[dt.date] = None
     summary: Optional[str] = None
     document_url: Optional[str] = None
 
@@ -181,6 +188,7 @@ class BarazaMeetingBase(BaseModel):
     visibility_scope: str = "GLOBAL"
     county_id: Optional[int] = None
     constituency_id: Optional[int] = None
+    is_anonymous: Optional[bool] = False
 
 class BarazaMeetingCreate(BarazaMeetingBase):
     pass
@@ -221,6 +229,7 @@ class BarazaPollBase(BaseModel):
     visibility_scope: str = "GLOBAL"
     county_id: Optional[int] = None
     constituency_id: Optional[int] = None
+    is_anonymous: Optional[bool] = False
 
 class BarazaPollCreate(BarazaPollBase):
     options: List[BarazaPollOptionCreate]
@@ -246,6 +255,7 @@ class BarazaPollVoteCreate(BaseModel):
 
 class BarazaForumCommentBase(BaseModel):
     content: str
+    is_anonymous: Optional[bool] = False
 
 class BarazaForumCommentCreate(BarazaForumCommentBase):
     post_id: int
@@ -267,6 +277,7 @@ class BarazaForumPostBase(BaseModel):
     visibility_scope: str = "GLOBAL"
     county_id: Optional[int] = None
     constituency_id: Optional[int] = None
+    is_anonymous: Optional[bool] = False
 
 class BarazaForumPostCreate(BarazaForumPostBase):
     pass

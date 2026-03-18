@@ -8,7 +8,7 @@ from app.models.speaker import Speaker
 from app.models.speaker_vault import SpeakerCredentialVault
 from app.models.verification_request import LeaderVerificationRequest
 from app.schemas import UserCreate, Token, UserLogin, User as UserSchema, UserUpdate, LeaderClaimRequest
-from app.core.security import verify_password, get_password_hash, create_access_token, hash_id_number, verify_id_number
+from app.core.security import verify_password, get_password_hash, create_access_token, hash_id_number, verify_id_number, decrypt_pii
 from app.core.logger import logger
 from datetime import timedelta
 
@@ -244,8 +244,8 @@ def claim_leader_profile(
             raise HTTPException(status_code=404, detail="Official verification records for this leader are not yet in the system.")
 
         # 4. Securely verify the ID numbers (something they know)
-        if not verify_id_number(claim.maisha_namba, vault.maisha_namba_hash) or \
-           not verify_id_number(claim.staff_id, vault.staff_id_hash):
+        if decrypt_pii(vault.maisha_namba_encrypted) != claim.maisha_namba or \
+           decrypt_pii(vault.staff_id_encrypted) != claim.staff_id:
             logger.warning(f"Failed identity claim attempt by {user.email} for Speaker ID {claim.speaker_id}.")
             raise HTTPException(status_code=401, detail="The Maisha Namba or Staff ID provided does not match our official records.")
 

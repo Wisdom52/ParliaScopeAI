@@ -17,6 +17,7 @@ class User(Base):
     
     hashed_password = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
+    display_name = Column(String, unique=True, nullable=True) # D1: Pseudonymisation
     id_number = Column(String, nullable=True)
     latitude = Column(String, nullable=True)
     longitude = Column(String, nullable=True)
@@ -26,6 +27,9 @@ class User(Base):
     # Notification preferences
     whatsapp_number = Column(String, nullable=True)
     push_token = Column(String, nullable=True)
+    
+    # D1 Privacy 
+    is_anonymous_default = Column(Boolean, default=False)
     
     # Leader Verification Fields
     role = Column(String, default="CITIZEN") # "CITIZEN" or "LEADER"

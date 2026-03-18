@@ -1,9 +1,11 @@
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models.speaker_vault import SpeakerCredentialVault
-from app.core.security import hash_id_number
+from app.core.security import encrypt_pii
 from app.core.logger import logger
 
 def seed_leader_vault():
+    SpeakerCredentialVault.__table__.drop(engine, checkfirst=True)
+    SpeakerCredentialVault.__table__.create(engine)
     db = SessionLocal()
     try:
         # Sample credentials for the first 4 real leaders in the DB
@@ -21,8 +23,8 @@ def seed_leader_vault():
             if not exists:
                 new_entry = SpeakerCredentialVault(
                     speaker_id=cred["speaker_id"],
-                    maisha_namba_hash=hash_id_number(cred["maisha"]),
-                    staff_id_hash=hash_id_number(cred["staff"])
+                    maisha_namba_encrypted=encrypt_pii(cred["maisha"]),
+                    staff_id_encrypted=encrypt_pii(cred["staff"])
                 )
                 db.add(new_entry)
         

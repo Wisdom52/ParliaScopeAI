@@ -5,6 +5,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 from app.models.speech import SpeechSegment
 import asyncio
+from app.core.logger import logger
 
 # Ensure static/audio exists relative to the backend run location
 # Assuming running from 'backend/' directory
@@ -49,7 +50,8 @@ async def get_latest_brief_items(db: Session):
             "id": h.id,
             "type": "hansard",
             "title": h.title,
-            "has_summary": bool(h.ai_summary)
+            "has_summary": bool(h.ai_summary),
+            "source_url": h.pdf_url  # Link back to original Hansard PDF on parliament.go.ke
         })
     
     for b in bills:
@@ -57,7 +59,8 @@ async def get_latest_brief_items(db: Session):
             "id": b.id,
             "type": "bill",
             "title": b.title,
-            "has_summary": bool(b.summary)
+            "has_summary": bool(b.summary),
+            "source_url": b.document_url  # Link back to original Bill PDF on parliament.go.ke
         })
 
     return items, latest_date
@@ -73,10 +76,12 @@ async def get_document_brief(db: Session, item_id: int, item_type: str, lang: st
         item = db.query(Hansard).filter(Hansard.id == item_id).first()
         raw_summary = item.ai_summary if item else None
         title = item.title if item else "Unknown Hansard"
+        source_url = item.pdf_url if item else None
     else:
         item = db.query(Bill).filter(Bill.id == item_id).first()
         raw_summary = item.summary if item else None
         title = item.title if item else "Unknown Bill"
+        source_url = item.document_url if item else None
 
     if not raw_summary:
         return {"transcript": "Summary not available for this document.", "audio_url": None}
@@ -96,6 +101,7 @@ async def get_document_brief(db: Session, item_id: int, item_type: str, lang: st
             )
             transcript = response['message']['content']
         except Exception as e:
+            logger.error(f"Error translating to Swahili using llama3.2:3b: {str(e)}")
             transcript = f"Error translating to Swahili: {str(e)}\n\nOriginal English:\n{raw_summary}"
 
     # Generate Audio
@@ -104,7 +110,8 @@ async def get_document_brief(db: Session, item_id: int, item_type: str, lang: st
     return {
         "transcript": transcript,
         "audio_url": audio_path,
-        "title": title
+        "title": title,
+        "source_url": source_url  # Direct link to original PDF for traceability / anti-hallucination
     }
 
 async def synthesize_audio(text: str, lang: str = "en", identifier: str = "daily") -> str:
@@ -115,8 +122,21 @@ async def synthesize_audio(text: str, lang: str = "en", identifier: str = "daily
     filename = f"brief_{identifier}_{lang}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
 
-    if not os.path.exists(filepath):
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(filepath)
+    # Check if file exists and is not empty (at least 1KB)
+    if not os.path.exists(filepath) or os.path.getsize(filepath) < 1024:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            
+        logger.info(f"Synthesizing audio for {identifier} in {lang}...")
+        try:
+            communicate = edge_tts.Communicate(text, voice)
+            await communicate.save(filepath)
+            logger.info(f"Successfully synthesized audio to {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to synthesize audio: {str(e)}")
+            # Don't return partial/broken files
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return None
     
     return f"/static/audio/{filename}"

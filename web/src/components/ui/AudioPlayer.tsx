@@ -20,7 +20,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, title }) => {
             {title && <h4>{title}</h4>}
             <audio
                 ref={audioRef}
-                src={src}
+                src={src.startsWith('/') ? `http://localhost:8000${src}` : src}
                 controls
                 style={{ width: '100%', marginTop: '0.5rem' }}
             />

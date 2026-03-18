@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ImpactCard } from '../components/ImpactCard';
 import { Button } from '../components/ui/Button';
-import { Loader2, FileText, Activity } from 'lucide-react';
+import { Loader2, FileText, Activity, Headphones } from 'lucide-react';
+import { AudioPlayer } from '../components/ui/AudioPlayer';
 
 interface Bill {
     id: number;
     title: string;
+    date: string | null;
     summary: string;
     document_url: string;
     impacts: any[];
@@ -17,12 +19,12 @@ export const BillsPage: React.FC = () => {
     const [bills, setBills] = useState<Bill[]>([]);
     const [loading, setLoading] = useState(true);
     const [analyzingId, setAnalyzingId] = useState<number | null>(null);
+    const [audioData, setAudioData] = useState<Record<number, { en: string, sw: string }>>({});
+    const [loadingAudio, setLoadingAudio] = useState<Record<number, boolean>>({});
 
     const fetchBills = async () => {
         try {
-            const response = await fetch('http://localhost:8000/bills/', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await fetch('http://localhost:8000/bills/');
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -35,8 +37,8 @@ export const BillsPage: React.FC = () => {
     };
 
     useEffect(() => {
-        if (token) fetchBills();
-    }, [token]);
+        fetchBills();
+    }, []);
 
     const handleAnalyze = async (billId: number, rawText: string) => {
         setAnalyzingId(billId);
@@ -52,6 +54,31 @@ export const BillsPage: React.FC = () => {
         } catch (error) {
             console.error("Failed to start analysis:", error);
             setAnalyzingId(null);
+        }
+    };
+
+    const fetchAudio = async (billId: number) => {
+        if (audioData[billId]) return;
+        setLoadingAudio(prev => ({ ...prev, [billId]: true }));
+        try {
+            const [enRes, swRes] = await Promise.all([
+                fetch(`http://localhost:8000/audio/daily-brief?item_id=${billId}&item_type=bill&lang=en`),
+                fetch(`http://localhost:8000/audio/daily-brief?item_id=${billId}&item_type=bill&lang=sw`)
+            ]);
+            if (enRes.ok && swRes.ok) {
+                const enData = await enRes.json();
+                const swData = await swRes.json();
+                if (enData.audio_url && swData.audio_url) {
+                    setAudioData(prev => ({ 
+                        ...prev, 
+                        [billId]: { en: enData.audio_url, sw: swData.audio_url } 
+                    }));
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load audio", err);
+        } finally {
+            setLoadingAudio(prev => ({ ...prev, [billId]: false }));
         }
     };
 
@@ -92,9 +119,63 @@ export const BillsPage: React.FC = () => {
                             boxShadow: 'var(--shadow)'
                         }}>
                             <h2 style={{ fontSize: '1.4rem', color: 'var(--primary)', marginBottom: '0.5rem' }}>{bill.title}</h2>
-                            <p style={{ color: '#3A3A3C', lineHeight: '1.6', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                            {bill.date && (
+                                <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', fontWeight: 500 }}>
+                                    Dated: {new Date(bill.date).toLocaleDateString()}
+                                </p>
+                            )}
+                            <p style={{ color: '#3A3A3C', lineHeight: '1.6', marginBottom: '0.75rem', fontSize: '0.95rem' }}>
                                 {bill.summary}
                             </p>
+                            {/* Traceable source — addresses AI Hallucination & Bias risk */}
+                            {bill.document_url && (
+                                <div style={{
+                                    marginBottom: '1rem',
+                                    padding: '0.65rem 1rem',
+                                    background: '#f0f4ff',
+                                    borderLeft: '3px solid var(--primary)',
+                                    borderRadius: '6px',
+                                    fontSize: '0.82rem',
+                                    color: '#444',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    flexWrap: 'wrap'
+                                }}>
+                                    <span>⚠️ <strong>AI-Generated Summary</strong> — Always verify against the official source.</span>
+                                    <a
+                                        href={bill.document_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'underline' }}
+                                    >
+                                        📄 View Original Bill PDF on parliament.go.ke
+                                    </a>
+                                </div>
+                            )}
+
+                            {/* Audio-First Engagement UI */}
+                            <div style={{ marginTop: '1rem', marginBottom: '1.5rem', background: '#FAFAFA', padding: '1rem', borderRadius: '8px', border: '1px solid #eee' }}>
+                                <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#333' }}>
+                                    <Headphones size={18} color="var(--primary)" />
+                                    Audio-First Engagement
+                                </h3>
+                                {!audioData[bill.id] ? (
+                                    <div style={{ maxWidth: '300px' }}>
+                                        <Button 
+                                            label="Generate & Listen to Audio Summary" 
+                                            variant="outline" 
+                                            onPress={() => fetchAudio(bill.id)} 
+                                            loading={loadingAudio[bill.id]} 
+                                        />
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <AudioPlayer src={audioData[bill.id].en} title="🇬🇧 English Brief" />
+                                        <AudioPlayer src={audioData[bill.id].sw} title="🇰🇪 Swahili Brief (Kiswahili)" />
+                                    </div>
+                                )}
+                            </div>
 
                             {bill.impacts && bill.impacts.length > 0 ? (
                                 <div>

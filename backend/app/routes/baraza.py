@@ -73,6 +73,10 @@ def create_meeting(
         if not meeting_data.get("constituency_id"):
             meeting_data["constituency_id"] = current_user.constituency_id
             
+    # Default to user's anonymous preference if not explicitly set
+    if "is_anonymous" not in meeting_data:
+        meeting_data["is_anonymous"] = current_user.is_anonymous_default
+            
     db_meeting = BarazaMeeting(**meeting_data)
     db.add(db_meeting)
     db.commit()
@@ -164,6 +168,10 @@ def create_poll(
             poll_data["county_id"] = current_user.county_id
         if not poll_data.get("constituency_id"):
             poll_data["constituency_id"] = current_user.constituency_id
+            
+    # Default to user's anonymous preference if not explicitly set
+    if "is_anonymous" not in poll_data:
+        poll_data["is_anonymous"] = current_user.is_anonymous_default
             
     db_poll = BarazaPoll(**poll_data)
     db.add(db_poll)
@@ -277,7 +285,11 @@ def get_forum_posts(current_user: Optional[User] = Depends(get_current_user_opti
     posts = query.order_by(BarazaForumPost.created_at.desc()).all()
     # Add author name
     for post in posts:
-        post.author_name = post.author.full_name if post.author else "Citizen"
+        is_admin = current_user is not None and current_user.is_admin
+        if post.is_anonymous and not is_admin:
+            post.author_name = "Anonymous Citizen"
+        else:
+            post.author_name = (post.author.display_name or post.author.full_name) if post.author else "Citizen"
     return posts
 
 @router.post("/forum", response_model=BarazaForumPostOut)
@@ -286,10 +298,13 @@ def create_forum_post(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    is_anon = post.is_anonymous if post.is_anonymous is not None else current_user.is_anonymous_default
+    
     db_post = BarazaForumPost(
         title=post.title,
         content=post.content,
         author_id=current_user.id,
+        is_anonymous=is_anon,
         target_audience=post.target_audience,
         visibility_scope=post.visibility_scope,
         county_id=post.county_id or (current_user.county_id if post.visibility_scope == "REGIONAL" else None),
@@ -298,7 +313,8 @@ def create_forum_post(
     db.add(db_post)
     db.commit()
     db.refresh(db_post)
-    db_post.author_name = current_user.full_name
+    is_admin = current_user is not None and current_user.is_admin
+    db_post.author_name = "Anonymous Citizen" if (db_post.is_anonymous and not is_admin) else (current_user.display_name or current_user.full_name)
     return db_post
 
 @router.post("/forum/comments", response_model=BarazaForumCommentOut)
@@ -307,15 +323,19 @@ def create_comment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    is_anon = comment.is_anonymous if comment.is_anonymous is not None else current_user.is_anonymous_default
+    
     db_comment = BarazaForumComment(
         post_id=comment.post_id,
         author_id=current_user.id,
-        content=comment.content
+        content=comment.content,
+        is_anonymous=is_anon
     )
     db.add(db_comment)
     db.commit()
     db.refresh(db_comment)
-    db_comment.author_name = current_user.full_name
+    is_admin = current_user is not None and current_user.is_admin
+    db_comment.author_name = "Anonymous Citizen" if (db_comment.is_anonymous and not is_admin) else (current_user.display_name or current_user.full_name)
     return db_comment
 
 # --- Live Pulse ---
@@ -406,7 +426,13 @@ def get_live_chats(db: Session = Depends(get_db)):
     # Reverse to return oldest to newest (better for UI appending)
     chats.reverse()
     for chat in chats:
-        chat.user_name = chat.user.full_name if chat.user else "Citizen"
+        if chat.user:
+            if chat.user.is_anonymous_default:
+                chat.user_name = "Anonymous Citizen"
+            else:
+                chat.user_name = chat.user.display_name or chat.user.full_name
+        else:
+            chat.user_name = "Citizen"
     return chats
 
 @router.get("/live/chat/analytics", response_model=List[BarazaLiveChatOut])
@@ -423,7 +449,13 @@ def get_live_chat_analytics(
     
     chats = query.order_by(BarazaLiveChat.created_at.desc()).limit(50).all()
     for chat in chats:
-        chat.user_name = chat.user.full_name if chat.user else "Citizen"
+        if chat.user:
+            if chat.user.is_anonymous_default:
+                chat.user_name = "Anonymous Citizen"
+            else:
+                chat.user_name = chat.user.display_name or chat.user.full_name
+        else:
+            chat.user_name = "Citizen"
     return chats
 
 @router.post("/live/chat", response_model=BarazaLiveChatOut)
@@ -461,7 +493,10 @@ def post_live_chat(
     db.add(db_chat)
     db.commit()
     db.refresh(db_chat)
-    db_chat.user_name = current_user.full_name
+    if current_user.is_anonymous_default:
+        db_chat.user_name = "Anonymous Citizen"
+    else:
+        db_chat.user_name = current_user.display_name or current_user.full_name
     return db_chat
 
 # --- Civic IQ & Gamification ---

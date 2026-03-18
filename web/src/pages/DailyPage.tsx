@@ -8,12 +8,14 @@ interface BriefItem {
     type: 'hansard' | 'bill';
     title: string;
     has_summary: boolean;
+    source_url?: string;
 }
 
 interface SelectedBrief {
     transcript: string;
     audio_url: string;
     title: string;
+    source_url?: string;
 }
 
 export const DailyPage: React.FC = () => {
@@ -208,6 +210,29 @@ export const DailyPage: React.FC = () => {
                                                 <div className="script-body">
                                                     {readLang === 'en' ? briefData.en?.transcript : briefData.sw?.transcript}
                                                 </div>
+                                                {/* Traceable source link — addresses AI Hallucination risk */}
+                                                {(briefData.en?.source_url || selectedItem.source_url) && (
+                                                    <div style={{
+                                                        marginTop: '1.5rem',
+                                                        padding: '0.75rem 1rem',
+                                                        background: '#f0f4ff',
+                                                        borderLeft: '3px solid var(--primary)',
+                                                        borderRadius: '6px',
+                                                        fontSize: '0.85rem',
+                                                        color: '#444'
+                                                    }}>
+                                                        ⚠️ <strong>AI-Generated Summary</strong> — Always verify against the official source.
+                                                        {' '}
+                                                        <a
+                                                            href={briefData.en?.source_url || selectedItem.source_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'underline' }}
+                                                        >
+                                                            📄 View Original PDF on parliament.go.ke
+                                                        </a>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

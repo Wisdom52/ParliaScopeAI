@@ -12,8 +12,8 @@ class SpeakerCredentialVault(Base):
     id = Column(Integer, primary_key=True, index=True)
     speaker_id = Column(Integer, ForeignKey("speakers.id"), unique=True, nullable=False)
     
-    # Stored as hashes for security (SHA-256 or similar)
-    maisha_namba_hash = Column(String, nullable=False)
-    staff_id_hash = Column(String, nullable=False)
+    # Stored as symmetrically encrypted values to protect PII securely per D1
+    maisha_namba_encrypted = Column(String, nullable=False)
+    staff_id_encrypted = Column(String, nullable=False)
 
     speaker = relationship("Speaker")
