@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { AlertSettings } from '../components/AlertSettings';
+import { PersonalImpactCard } from '../components/PersonalImpactCard';
 
 interface Badge {
     id: number;
@@ -275,6 +276,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                     </div>
                 </div>
                 )}
+
+                {/* Impact Tracking Module (Citizens only) */}
+                {user.role !== 'LEADER' && !user.is_admin && <PersonalImpactCard />}
 
                 {/* Alert Settings Module (Citizens only) */}
                 {user.role !== 'LEADER' && !user.is_admin && <AlertSettings />}

@@ -11,6 +11,7 @@ interface Hansard {
     title: string;
     pdf_url: string;
     ai_summary: string | null;
+    date: string | null;
     created_at: string;
 }
 
@@ -44,7 +45,7 @@ export const SearchScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [documents, setDocuments] = useState<Hansard[]>([]);
     const [docsLoading, setDocsLoading] = useState(false);
-    const [selectedDoc, setSelectedDoc] = useState<Hansard | null>(null);
+    const [selectedDoc, setSelectedDoc] = useState<any>(null);
     const [activeCategory, setActiveCategory] = useState<'parliament' | 'bills' | 'shield'>('parliament');
 
     // Bills State
@@ -65,12 +66,16 @@ export const SearchScreen = () => {
     const [factResult, setFactResult] = useState<FactShieldResult | null>(null);
     const [factLoading, setFactLoading] = useState(false);
 
+    // Audio-First Engagement State
+    const [audioData, setAudioData] = useState<{ en: string, sw: string } | null>(null);
+    const [loadingAudio, setLoadingAudio] = useState(false);
+
     const scrollRef = useRef<ScrollView>(null);
 
     const fetchDocs = async () => {
         setDocsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/docs/`);
+            const response = await fetch(`${API_BASE_URL}/hansards/`);
             if (response.ok) {
                 setDocuments(await response.json());
             }
@@ -79,6 +84,28 @@ export const SearchScreen = () => {
         } finally {
             setDocsLoading(false);
             setRefreshing(false);
+        }
+    };
+
+    const fetchAudio = async (docId: number, docType: 'hansard' | 'bill') => {
+        if (audioData) return;
+        setLoadingAudio(true);
+        try {
+            const [enRes, swRes] = await Promise.all([
+                fetch(`${API_BASE_URL}/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=en`),
+                fetch(`${API_BASE_URL}/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=sw`)
+            ]);
+            if (enRes.ok && swRes.ok) {
+                const enData = await enRes.json();
+                const swData = await swRes.json();
+                if (enData.audio_url && swData.audio_url) {
+                    setAudioData({ en: enData.audio_url, sw: swData.audio_url });
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load audio", err);
+        } finally {
+            setLoadingAudio(false);
         }
     };
 
@@ -231,7 +258,7 @@ export const SearchScreen = () => {
                     refreshing={docsLoading}
                     onRefresh={fetchDocs}
                     renderItem={({ item }) => (
-                        <TouchableOpacity style={styles.docCard} onPress={() => { setSelectedDoc(item); setChatMessages([]); }}>
+                        <TouchableOpacity style={styles.docCard} onPress={() => { setSelectedDoc(item); setChatMessages([]); setAudioData(null); }}>
                             <View style={styles.docIconContainer}>
                                 <MaterialCommunityIcons name="file-document-outline" size={24} color="#007AFF" />
                             </View>
@@ -252,23 +279,27 @@ export const SearchScreen = () => {
                     refreshing={billsLoading}
                     onRefresh={() => fetchBills()}
                     renderItem={({ item }) => (
-                        <View style={styles.billCard}>
-                            <View style={styles.billHeader}>
-                                <Text style={styles.billTitle}>{item.title}</Text>
-                                <TouchableOpacity style={styles.billChatBtn} onPress={() => { setSelectedDoc({ id: item.id, title: item.title, pdf_url: '', ai_summary: item.summary, created_at: '' }); setChatMessages([]); }}>
-                                    <MaterialCommunityIcons name="chat-processing" size={18} color="#007AFF" />
-                                    <Text style={styles.billChatBtnText}>Chat</Text>
-                                </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={styles.docCard} 
+                            onPress={() => { 
+                                setSelectedDoc({
+                                    ...item,
+                                    ai_summary: item.summary,
+                                    pdf_url: item.pdf_url || ''
+                                }); 
+                                setChatMessages([]); 
+                                setAudioData(null); 
+                            }}
+                        >
+                            <View style={[styles.docIconContainer, { backgroundColor: '#F0FFF7' }]}>
+                                <MaterialCommunityIcons name="gavel" size={24} color="#10B981" />
                             </View>
-                            <Text style={styles.billSummary}>{item.summary}</Text>
-                            {item.impacts && item.impacts.length > 0 ? (
-                                item.impacts.map(impact => <ImpactCard key={impact.id} impact={impact} />)
-                            ) : (
-                                <View style={styles.billEmptyAnalysis}>
-                                    <Button label="Initialize Impact Analysis" onPress={() => handleAnalyze(item.id, item.summary)} loading={analyzingId === item.id} />
-                                </View>
-                            )}
-                        </View>
+                            <View style={styles.docInfo}>
+                                <Text style={styles.docTitle}>{item.title}</Text>
+                                <Text style={styles.docSnippet} numberOfLines={2}>{item.summary || "Analysis pending..."}</Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={20} color="#ccc" />
+                        </TouchableOpacity>
                     )}
                     ListEmptyComponent={billsLoading ? <ActivityIndicator style={{ marginTop: 20 }} /> : <Text style={styles.emptyText}>No matching Bills found.</Text>}
                 />
@@ -357,7 +388,7 @@ export const SearchScreen = () => {
                             <Text style={styles.modalTitle} numberOfLines={1}>{selectedDoc?.title}</Text>
                             <Text style={styles.modalSub}>Parliamentary AI Intelligence</Text>
                         </View>
-                        <TouchableOpacity onPress={() => setSelectedDoc(null)} style={styles.modalCloseBtn}>
+                        <TouchableOpacity onPress={() => { setSelectedDoc(null); setAudioData(null); }} style={styles.modalCloseBtn}>
                             <MaterialCommunityIcons name="close" size={24} color="#666" />
                         </TouchableOpacity>
                     </View>
@@ -369,24 +400,43 @@ export const SearchScreen = () => {
                                 <Text style={styles.sectionBadgeText}>Official Summary</Text>
                             </View>
                             {selectedDoc?.ai_summary ? (
-                                selectedDoc.ai_summary.split('\n').map((line, i) => {
-                                    if (line.startsWith('## ')) {
+                                selectedDoc.ai_summary.split('\n').map((line: string, i: number) => {
+                                    if (!line.trim() || line.trim() === '---') return <View key={i} style={{ height: 8 }} />;
+
+                                    // Port Section Header Logic from Web
+                                    const isSectionHeader = (t: string) => {
+                                        return t === t.toUpperCase() && t.length > 3 && /[A-Z]/.test(t) && !/^\d/.test(t);
+                                    };
+
+                                    // Port Sub-Label Logic from Web
+                                    const isSubLabel = (t: string) => {
+                                        return /^[A-Z][A-Za-z\s]+:\s/.test(t);
+                                    };
+
+                                    const t = line.trim();
+                                    
+                                    if (isSectionHeader(t)) {
                                         return (
-                                            <Text key={i} style={{ fontSize: 14, fontWeight: '800', color: '#1e293b', marginTop: i === 0 ? 0 : 16, marginBottom: 4, borderBottomWidth: 2, borderBottomColor: '#007AFF', paddingBottom: 4 }}>
-                                                {line.replace('## ', '')}
+                                            <Text key={i} style={{ fontSize: 15, fontWeight: '800', color: '#1e293b', marginTop: i === 0 ? 0 : 20, marginBottom: 8, borderBottomWidth: 2, borderBottomColor: '#007AFF', paddingBottom: 4 }}>
+                                                {t}
                                             </Text>
                                         );
                                     }
-                                    if (line.startsWith('---') || line.trim() === '') return <View key={i} style={{ height: 4 }} />;
-                                    // Render inline bold
-                                    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+
+                                    if (isSubLabel(t)) {
+                                        const colonIdx = t.indexOf(':');
+                                        const label = t.slice(0, colonIdx);
+                                        const rest = t.slice(colonIdx + 1);
+                                        return (
+                                            <Text key={i} style={[styles.summaryText, { marginBottom: 6 }]}>
+                                                <Text style={{ fontWeight: '800' }}>{label}:</Text>{rest}
+                                            </Text>
+                                        );
+                                    }
+
                                     return (
-                                        <Text key={i} style={styles.summaryText}>
-                                            {parts.map((part, j) =>
-                                                part.startsWith('**') && part.endsWith('**')
-                                                    ? <Text key={j} style={{ fontWeight: '700' }}>{part.slice(2, -2)}</Text>
-                                                    : part
-                                            )}
+                                        <Text key={i} style={[styles.summaryText, { marginBottom: 6 }]}>
+                                            {t}
                                         </Text>
                                     );
                                 })
@@ -395,6 +445,53 @@ export const SearchScreen = () => {
                                     System is still generating the summary. Check back soon.
                                 </Text>
                             )}
+                            
+                            {/* Bill Specific Impacts Section - Moved to Modal */}
+                            {activeCategory === 'bills' && selectedDoc && (
+                                <View style={{ marginTop: 20 }}>
+                                    <View style={[styles.sectionBadge, { marginBottom: 15 }]}>
+                                        <MaterialCommunityIcons name="gavel" size={16} color="#10B981" />
+                                        <Text style={[styles.sectionBadgeText, { color: '#10B981' }]}>Impact Analysis</Text>
+                                    </View>
+                                    {selectedDoc.impacts && selectedDoc.impacts.length > 0 ? (
+                                        selectedDoc.impacts.map((impact: any) => <ImpactCard key={impact.id} impact={impact} />)
+                                    ) : (
+                                        <View style={styles.billEmptyAnalysis}>
+                                            <Button 
+                                                label="Initialize Impact Analysis" 
+                                                onPress={() => handleAnalyze(selectedDoc.id, selectedDoc.ai_summary)} 
+                                                loading={analyzingId === selectedDoc.id} 
+                                            />
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+                            
+                            {selectedDoc?.pdf_url && (
+                                <View style={styles.sourceTag}>
+                                    <Text style={styles.sourceTagText}>AI-Generated Summary — Always verify against official source.</Text>
+                                    <TouchableOpacity onPress={() => {/* Linking could be added if needed but strictly porting web text */}}>
+                                        <Text style={styles.sourceLink}> parliament.go.ke Source</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {/* Audio-First Engagement UI - Ported from Web */}
+                            <View style={styles.audioEngagementContainer}>
+                                <Text style={styles.audioEngagementTitle}>Audio-First Engagement</Text>
+                                {!audioData ? (
+                                    <Button 
+                                        label={loadingAudio ? "Generating Briefs..." : "Listen to Audio Summary"} 
+                                        onPress={() => fetchAudio(selectedDoc!.id, activeCategory === 'bills' ? 'bill' : 'hansard')} 
+                                        loading={loadingAudio} 
+                                    />
+                                ) : (
+                                    <View style={styles.audioPlayers}>
+                                        <AudioPlayer sourceUrl={audioData.en} title="🇬🇧 English Brief" />
+                                        <AudioPlayer sourceUrl={audioData.sw} title="🇰🇪 Kiswahili Brief" />
+                                    </View>
+                                )}
+                            </View>
                         </View>
 
                         <View style={styles.chatSection}>
@@ -501,6 +598,14 @@ const styles = StyleSheet.create({
     chatInputRow: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     chatInput: { flex: 1, height: 48, backgroundColor: '#f5f5f5', borderRadius: 24, paddingHorizontal: 20, fontSize: 15, color: '#1a1a1a', marginRight: 10 },
     sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' },
+
+    // Web Parity Styles
+    sourceTag: { marginTop: 20, padding: 12, backgroundColor: '#F0F7FF', borderRadius: 10, borderLeftWidth: 4, borderLeftColor: '#007AFF' },
+    sourceTagText: { fontSize: 12, color: '#444', fontStyle: 'italic' },
+    sourceLink: { fontSize: 13, color: '#007AFF', fontWeight: '700', marginTop: 4, textDecorationLine: 'underline' },
+    audioEngagementContainer: { marginTop: 30, padding: 20, backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#eee' },
+    audioEngagementTitle: { fontSize: 16, fontWeight: '800', color: '#1a1a1a', marginBottom: 15 },
+    audioPlayers: { gap: 10 },
 
     // Shield Styles
     shieldSection: { padding: 20, paddingBottom: 100 },

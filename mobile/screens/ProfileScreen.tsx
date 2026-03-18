@@ -5,6 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Input } from '../components/ui/Input';
 import { AlertSettings } from '../components/AlertSettings';
+import { PersonalImpactCard } from '../components/PersonalImpactCard';
+import { Switch } from 'react-native';
 
 interface ProfileScreenProps {
     user: any;
@@ -23,11 +25,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
         county_id: user?.county_id || 0,
         constituency_id: user?.constituency_id || 0,
         whatsapp_number: user?.whatsapp_number || '',
-        push_token: user?.push_token || ''
+        push_token: user?.push_token || '',
+        display_name: user?.display_name || '',
+        is_anonymous_default: user?.is_anonymous_default || false
     });
     const [counties, setCounties] = useState<any[]>([]);
     const [constituencies, setConstituencies] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [gamification, setGamification] = useState({ points: 0, badges: [] as any[] });
 
     const [leaderStats, setLeaderStats] = useState<any>(null);
 
@@ -39,8 +44,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
         
         if (user?.role === 'LEADER' && user?.speaker_id) {
             fetchLeaderStats();
+        } else if (user) {
+            fetchGamification();
         }
     }, [user]);
+
+    const fetchGamification = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/baraza/user/gamification`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setGamification({
+                    points: data.prosperity_points ?? 0,
+                    badges: Array.isArray(data.badges) ? data.badges : []
+                });
+            }
+        } catch (e) {
+            console.error("Failed to fetch gamification", e);
+        }
+    };
 
     const fetchLeaderStats = async () => {
         try {
@@ -139,18 +163,33 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                     </View>
 
                     {user?.role !== 'LEADER' && !user?.is_admin && (
-                        <View style={styles.field}>
-                            <Text style={styles.label}>WhatsApp Number (Alerts)</Text>
-                            {isEditing ? (
-                                <Input
-                                    value={formData.whatsapp_number}
-                                    onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
-                                    placeholder="+254700000000"
-                                />
-                            ) : (
-                                <Text style={styles.value}>{user?.whatsapp_number || 'Not provided'}</Text>
-                            )}
-                        </View>
+                        <>
+                            <View style={styles.field}>
+                                <Text style={styles.label}>WhatsApp Number (Alerts)</Text>
+                                {isEditing ? (
+                                    <Input
+                                        value={formData.whatsapp_number}
+                                        onChangeText={(text) => setFormData({ ...formData, whatsapp_number: text })}
+                                        placeholder="+254700000000"
+                                    />
+                                ) : (
+                                    <Text style={styles.value}>{user?.whatsapp_number || 'Not provided'}</Text>
+                                )}
+                            </View>
+
+                            <View style={styles.field}>
+                                <Text style={styles.label}>Public Display Name (Pseudonym)</Text>
+                                {isEditing ? (
+                                    <Input
+                                        value={formData.display_name}
+                                        onChangeText={(text) => setFormData({ ...formData, display_name: text })}
+                                        placeholder="e.g. Concerned Citizen 001"
+                                    />
+                                ) : (
+                                    <Text style={styles.value}>{user?.display_name || 'Not provided'}</Text>
+                                )}
+                            </View>
+                        </>
                     )}
                 </View>
 
@@ -198,6 +237,72 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                             </View>
                         </View>
                     </>
+                )}
+
+                {/* Civic Passport (Gamification) - Citizens only */}
+                {user?.role !== 'LEADER' && !user?.is_admin && (
+                    <View style={styles.passportCard}>
+                        <View style={styles.sectionHeader}>
+                            <MaterialCommunityIcons name="trophy" size={20} color="#FFD700" />
+                            <Text style={[styles.sectionTitle, { color: '#FFD700', marginLeft: 8 }]}>Civic Passport</Text>
+                        </View>
+                        
+                        <View style={styles.pointsContainer}>
+                            <View>
+                                <Text style={styles.pointsLabel}>Prosperity Points</Text>
+                                <Text style={styles.pointsValue}>{gamification.points}</Text>
+                            </View>
+                            <View style={styles.rankBadge}>
+                                <Text style={styles.rankText}>
+                                    {gamification.points < 50 ? 'NOVICE' : gamification.points < 200 ? 'PATRIOT' : 'CHAMPION'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.progressBarContainer}>
+                            <View style={[styles.progressBar, { width: `${Math.min((gamification.points / 200) * 100, 100)}%` }]} />
+                        </View>
+
+                        <Text style={styles.badgesHeader}>Earned Badges</Text>
+                        <View style={styles.badgesGrid}>
+                            {gamification.badges.length > 0 ? gamification.badges.map((badge, idx) => (
+                                <View key={idx} style={styles.badgeItem}>
+                                    <Text style={styles.badgeIcon}>{badge.icon_url || '🏅'}</Text>
+                                    <Text style={styles.badgeName} numberOfLines={1}>{badge.name}</Text>
+                                </View>
+                            )) : (
+                                <View style={styles.emptyBadges}>
+                                    <Text style={styles.emptyBadgesText}>No badges yet. Start a quiz in Baraza!</Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                )}
+
+                {/* Personal Impact Tracking Module (Citizens only) */}
+                {user?.role !== 'LEADER' && !user?.is_admin && <PersonalImpactCard token={token} />}
+
+                {/* Baraza Privacy Settings */}
+                {user?.role !== 'LEADER' && !user?.is_admin && (
+                    <View style={styles.card}>
+                        <View style={styles.sectionHeader}>
+                            <MaterialCommunityIcons name="shield-account" size={20} color="#007AFF" />
+                            <Text style={[styles.sectionTitle, { marginLeft: 8 }]}>Baraza Privacy</Text>
+                        </View>
+                        
+                        <View style={styles.anonymityOption}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.optionsTitle}>Post Anonymously by Default</Text>
+                                <Text style={styles.optionSub}>Hide your real name on public forum posts</Text>
+                            </View>
+                            <Switch
+                                value={isEditing ? formData.is_anonymous_default : user.is_anonymous_default}
+                                onValueChange={(val) => isEditing && setFormData({ ...formData, is_anonymous_default: val })}
+                                disabled={!isEditing}
+                                trackColor={{ false: "#D1D1D6", true: "#34C759" }}
+                            />
+                        </View>
+                    </View>
                 )}
 
                 {/* Alert Settings Component (Citizens Only) */}
@@ -304,4 +409,118 @@ const styles = StyleSheet.create({
         borderColor: '#FFD6D6',
     },
     logoutText: { color: '#FF3B30', fontWeight: '700', marginLeft: 10, fontSize: 16 },
+
+    // Web Parity Styles
+    passportCard: {
+        backgroundColor: '#1C1C1E',
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 25,
+        shadowColor: '#000',
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+        elevation: 5
+    },
+    pointsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        marginBottom: 15
+    },
+    pointsLabel: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.6)',
+        marginBottom: 4,
+        fontWeight: '600'
+    },
+    pointsValue: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#fff'
+    },
+    rankBadge: {
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 15,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 215, 0, 0.3)'
+    },
+    rankText: {
+        color: '#FFD700',
+        fontSize: 11,
+        fontWeight: '800'
+    },
+    progressBarContainer: {
+        height: 8,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 4,
+        overflow: 'hidden',
+        marginBottom: 25
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: '#FFD700',
+        borderRadius: 4
+    },
+    badgesHeader: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.6)',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        marginBottom: 15,
+        letterSpacing: 0.5
+    },
+    badgesGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12
+    },
+    badgeItem: {
+        width: 75,
+        alignItems: 'center',
+        padding: 10,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 12
+    },
+    badgeIcon: {
+        fontSize: 24,
+        marginBottom: 6
+    },
+    badgeName: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: '#fff',
+        textAlign: 'center'
+    },
+    emptyBadges: {
+        padding: 20,
+        width: '100%',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 12,
+        borderStyle: 'dashed'
+    },
+    emptyBadgesText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 12,
+        fontStyle: 'italic'
+    },
+    anonymityOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        marginTop: 5
+    },
+    optionsTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1C1C1E'
+    },
+    optionSub: {
+        fontSize: 12,
+        color: '#8E8E93',
+        marginTop: 2
+    }
 });

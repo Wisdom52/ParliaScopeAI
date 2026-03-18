@@ -130,9 +130,15 @@ class BillOut(BillBase):
     id: int
     created_at: datetime
     impacts: List[BillImpactOut] = []
+    matching_topics: List[str] = [] # User's followed topics that match this bill
 
     class Config:
         from_attributes = True
+
+class PersonalizedImpact(BaseModel):
+    topic: str
+    explanation: str
+    sentiment: str
 
 # --- Representatives & Reviews ---
 class ReviewBase(BaseModel):

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Star, TrendingUp, ShieldCheck, Loader2 } from 'lucide-react';
+import { Star, ShieldCheck, Loader2 } from 'lucide-react';
 import './LeaderDashboard.css';
 
 export const LeaderDashboard: React.FC = () => {
@@ -152,16 +152,6 @@ export const LeaderDashboard: React.FC = () => {
                                 <div className="stat-footer">Based on constituent reviews</div>
                             </div>
 
-                            <div className="leader-stat-card">
-                                <div className="stat-header">
-                                    <TrendingUp className="stat-icon green" />
-                                    <span>Sentiment Index</span>
-                                </div>
-                                <div className="stat-main">
-                                    <span className="stat-value">Positive</span>
-                                </div>
-                                <div className="stat-footer">Up 12% this month</div>
-                            </div>
                         </div>
 
                         <div className="performance-analytics-card">

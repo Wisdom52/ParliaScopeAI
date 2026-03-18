@@ -12,9 +12,10 @@ import { LeaderDashboardScreen } from './screens/LeaderDashboardScreen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { BarazaScreen } from './screens/BarazaScreen';
+import { AdminDashboardScreen } from './screens/AdminDashboardScreen';
 import { API_BASE_URL } from './config/api';
 
-type TabId = 'daily' | 'docs' | 'baraza' | 'representative' | 'profile';
+type TabId = 'daily' | 'docs' | 'baraza' | 'representative' | 'profile' | 'admin_dash';
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
     { id: 'daily', label: 'Daily', icon: 'calendar-blank' },
@@ -25,7 +26,7 @@ const TABS: { id: TabId; label: string; icon: any }[] = [
 ];
 
 const LEADER_TABS: TabId[] = ['baraza', 'representative', 'profile'];
-const ADMIN_TABS: TabId[] = ['profile'];
+const ADMIN_TABS: TabId[] = ['admin_dash', 'profile'];
 
 export default function App() {
     const [user, setUser] = useState<any>(null);
@@ -56,8 +57,11 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (user?.is_admin && activeTab !== 'profile') {
-            setActiveTab('profile');
+        if (user?.is_admin) {
+            // Allow admin to move freely, default to admin_dash if on forbidden daily/docs
+            if (activeTab === 'daily' || activeTab === 'docs') {
+                setActiveTab('admin_dash');
+            }
         } else if (user?.role === 'LEADER') {
             if (activeTab === 'daily' || activeTab === 'docs') {
                 setActiveTab('representative');
@@ -92,6 +96,7 @@ export default function App() {
                 {activeTab === 'representative' && (
                     user?.role === 'LEADER' ? <LeaderDashboardScreen user={user} token={token} /> : <RepresentativeScreen onSwitchToProfile={() => setActiveTab('profile')} />
                 )}
+                {activeTab === 'admin_dash' && user?.is_admin && <AdminDashboardScreen user={user} token={token} />}
                 {activeTab === 'profile' && (
                     user ? (
                         <ProfileScreen
@@ -120,7 +125,8 @@ export default function App() {
                             color={activeTab === tab.id ? '#007AFF' : '#888'}
                         />
                         <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
-                            {tab.id === 'representative' && user?.role === 'LEADER' ? 'Rep Portal' : tab.label}
+                            {tab.id === 'representative' && user?.role === 'LEADER' ? 'Rep Portal' : 
+                             tab.id === 'admin_dash' ? 'Admin' : tab.label}
                         </Text>
                     </TouchableOpacity>
                 ))}

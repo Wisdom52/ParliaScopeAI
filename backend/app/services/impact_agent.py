@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any
 import requests
 import os
+import asyncio # Keep for any async utils if needed, but primarily requests here
 
 logger = logging.getLogger(__name__)
 
@@ -171,3 +172,53 @@ def generate_bill_summary(bill_text: str) -> str:
     except Exception as e:
         logger.error(f"Bill summary generation failed: {e}")
         return f"Summary could not be generated at this time. Error: {type(e).__name__}."
+
+def generate_personalized_impact(bill_text: str, topic: str) -> Dict[str, str]:
+    """
+    On-demand AI analysis for how a specific bill affects a custom user topic.
+    Used when a user clicks a matched topic pill on the Bills page.
+    """
+    try:
+        prompt = f"""You are a legislative analyst for the Kenyan Parliament. 
+Analyze how the following Bill affects the specific topic/sector: '{topic}'.
+
+Provide a concise one-paragraph explanation (max 80 words) and a sentiment (Positive, Negative, or Neutral).
+
+Format your response EXACTLY like this:
+EXPLANATION: [Your analysis]
+SENTIMENT: [Positive, Negative, or Neutral]
+
+Bill Text (excerpts):
+{bill_text[:6000]}
+"""
+        payload = {
+            "model": MODEL_NAME,
+            "prompt": prompt,
+            "stream": False,
+        }
+        
+        response = requests.post(OLLAMA_API_URL, json=payload, timeout=120)
+        response.raise_for_status()
+        
+        text = response.json().get('response', '')
+        explanation = "No specific analysis could be generated."
+        sentiment = "Neutral"
+        
+        if "EXPLANATION:" in text:
+            parts = text.split("EXPLANATION:")[1].split("SENTIMENT:")
+            explanation = parts[0].strip()
+            if len(parts) > 1:
+                sentiment = parts[1].strip().split('\n')[0].replace('.', '')
+
+        return {
+            "topic": topic,
+            "explanation": explanation,
+            "sentiment": sentiment
+        }
+    except Exception as e:
+        logger.error(f"Personalized impact generation failed for {topic}: {e}")
+        return {
+            "topic": topic,
+            "explanation": "AI analysis is currently unavailable for this specific topic.",
+            "sentiment": "Neutral"
+        }

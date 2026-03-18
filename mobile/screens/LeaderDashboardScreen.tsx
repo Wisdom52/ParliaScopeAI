@@ -14,7 +14,7 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
     const [liveChats, setLiveChats] = useState<any[]>([]);
     const [stanceData, setStanceData] = useState<any>(null);
     const [filterMode, setFilterMode] = useState<'National' | 'Local'>('Local');
-    const [activeTab, setActiveTab] = useState<'overview' | 'feed' | 'feedback'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'stances' | 'feedback'>('overview');
 
     useEffect(() => {
         if (user?.role === 'LEADER') {
@@ -90,7 +90,7 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
     const renderOverview = () => (
         <View style={styles.overviewContainer}>
             <View style={styles.statsGrid}>
-                <View style={styles.statCard}>
+                <View style={[styles.statCard, { width: '100%' }]}>
                     <View style={[styles.statIcon, { backgroundColor: '#FEF9C3' }]}>
                         <MaterialCommunityIcons name="star" size={24} color="#A16207" />
                     </View>
@@ -100,14 +100,6 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                     </View>
                     <Text style={styles.statLabel}>Public Approval</Text>
                     <Text style={styles.statFooter}>Based on constituent reviews</Text>
-                </View>
-                <View style={styles.statCard}>
-                    <View style={[styles.statIcon, { backgroundColor: '#DCFCE7' }]}>
-                        <MaterialCommunityIcons name="trending-up" size={24} color="#166534" />
-                    </View>
-                    <Text style={styles.statVal}>Positive</Text>
-                    <Text style={styles.statLabel}>Sentiment Index</Text>
-                    <Text style={[styles.statFooter, { color: '#16a34a' }]}>Up 12% this month</Text>
                 </View>
             </View>
 
@@ -135,7 +127,7 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
         </View>
     );
 
-    const renderFeed = () => (
+    const renderStances = () => (
         <View style={styles.feedContainer}>
             <View style={styles.cardHeader}>
                 <Text style={styles.sectionTitle}>Live Stances</Text>
@@ -227,9 +219,21 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                         <Text style={styles.partyText}>{stats?.party || 'Independent'}</Text>
                     </View>
                 </View>
-                <View style={styles.badge}>
-                    <MaterialCommunityIcons name="shield-check" size={16} color="#007AFF" />
-                    <Text style={styles.badgeText}>Verified</Text>
+                <View style={[
+                    styles.badge, 
+                    !user?.is_verified ? styles.pendingBadge : (user?.is_active ? styles.verifiedBadge : styles.suspendedBadge)
+                ]}>
+                    <MaterialCommunityIcons 
+                        name={!user?.is_verified ? "clock-outline" : (user?.is_active ? "shield-check" : "alert-circle")} 
+                        size={16} 
+                        color={!user?.is_verified ? "#FF9500" : (user?.is_active ? "#007AFF" : "#FF3B30")} 
+                    />
+                    <Text style={[
+                        styles.badgeText,
+                        !user?.is_verified ? styles.pendingBadgeText : (user?.is_active ? styles.verifiedBadgeText : styles.suspendedBadgeText)
+                    ]}>
+                        {!user?.is_verified ? 'Pending' : user?.is_active ? 'Verified' : 'Suspended'}
+                    </Text>
                 </View>
             </View>
 
@@ -241,10 +245,10 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                     <Text style={[styles.mainTabText, activeTab === 'overview' && styles.mainTabTextActive]}>Overview</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                    style={[styles.mainTab, activeTab === 'feed' && styles.mainTabActive]}
-                    onPress={() => setActiveTab('feed')}
+                    style={[styles.mainTab, activeTab === 'stances' && styles.mainTabActive]}
+                    onPress={() => setActiveTab('stances')}
                 >
-                    <Text style={[styles.mainTabText, activeTab === 'feed' && styles.mainTabTextActive]}>Live Stances</Text>
+                    <Text style={[styles.mainTabText, activeTab === 'stances' && styles.mainTabTextActive]}>Live Stances</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                     style={[styles.mainTab, activeTab === 'feedback' && styles.mainTabActive]}
@@ -258,7 +262,7 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 contentContainerStyle={{ paddingBottom: 100 }}
             >
-                {activeTab === 'overview' ? renderOverview() : activeTab === 'feed' ? renderFeed() : renderFeedback()}
+                {activeTab === 'overview' ? renderOverview() : activeTab === 'stances' ? renderStances() : renderFeedback()}
             </ScrollView>
         </SafeAreaView>
     );
@@ -275,8 +279,14 @@ const styles = StyleSheet.create({
     metaText: { fontSize: 13, color: '#666' },
     dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#8E8E93', marginHorizontal: 8 },
     partyText: { fontSize: 12, color: '#007AFF', fontWeight: '700' },
-    badge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F7FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
-    badgeText: { fontSize: 12, fontWeight: '700', color: '#007AFF' },
+    badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+    badgeText: { fontSize: 12, fontWeight: '700' },
+    verifiedBadge: { backgroundColor: '#F0F7FF' },
+    verifiedBadgeText: { color: '#007AFF' },
+    pendingBadge: { backgroundColor: '#FFF7E6' },
+    pendingBadgeText: { color: '#FF9500' },
+    suspendedBadge: { backgroundColor: '#FFF2F2' },
+    suspendedBadgeText: { color: '#FF3B30' },
     
     mainTabs: { flexDirection: 'row', paddingHorizontal: 20, backgroundColor: '#fff', paddingBottom: 5 },
     mainTab: { paddingBottom: 10, marginRight: 20, borderBottomWidth: 3, borderBottomColor: 'transparent' },

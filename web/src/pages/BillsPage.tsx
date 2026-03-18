@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ImpactCard } from '../components/ImpactCard';
 import { Button } from '../components/ui/Button';
-import { Loader2, FileText, Activity, Headphones } from 'lucide-react';
+import { Loader2, FileText, Activity, Headphones, Target, X, Info } from 'lucide-react';
 import { AudioPlayer } from '../components/ui/AudioPlayer';
+
+interface Impact {
+    id: number;
+    archetype: string;
+    description: string;
+    sentiment: string;
+}
 
 interface Bill {
     id: number;
@@ -11,7 +18,8 @@ interface Bill {
     date: string | null;
     summary: string;
     document_url: string;
-    impacts: any[];
+    impacts: Impact[];
+    matching_topics?: string[];
 }
 
 export const BillsPage: React.FC = () => {
@@ -21,10 +29,14 @@ export const BillsPage: React.FC = () => {
     const [analyzingId, setAnalyzingId] = useState<number | null>(null);
     const [audioData, setAudioData] = useState<Record<number, { en: string, sw: string }>>({});
     const [loadingAudio, setLoadingAudio] = useState<Record<number, boolean>>({});
+    const [personalImpact, setPersonalImpact] = useState<{ topic: string, explanation: string, sentiment: string } | null>(null);
+    const [loadingPersonal, setLoadingPersonal] = useState(false);
 
     const fetchBills = async () => {
         try {
-            const response = await fetch('http://localhost:8000/bills/');
+            const response = await fetch('http://localhost:8000/bills/', {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -82,6 +94,27 @@ export const BillsPage: React.FC = () => {
         }
     };
 
+    const handlePersonalImpact = async (billId: number, topic: string) => {
+        setLoadingPersonal(true);
+        setPersonalImpact({ topic, explanation: "AI is analyzing how this bill affects your interest in " + topic + "...", sentiment: "Neutral" });
+        try {
+            const res = await fetch(`http://localhost:8000/bills/${billId}/personalized-impact?topic=${encodeURIComponent(topic)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPersonalImpact(data);
+            } else {
+                setPersonalImpact({ topic, explanation: "Failed to generate AI analysis for this topic.", sentiment: "Neutral" });
+            }
+        } catch (err) {
+            console.error(err);
+            setPersonalImpact(null);
+        } finally {
+            setLoadingPersonal(false);
+        }
+    };
+
     if (loading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -102,6 +135,36 @@ export const BillsPage: React.FC = () => {
                 </p>
             </div>
 
+            {/* Personalized Impact Modal */}
+            {personalImpact && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                    <div className="card" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: 'white', position: 'relative' }}>
+                        <button onClick={() => setPersonalImpact(null)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer' }}>
+                            <X size={24} color="#666" />
+                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', color: 'var(--primary)' }}>
+                            <Target size={24} />
+                            <h2 style={{ margin: 0 }}>Impact on: {personalImpact.topic}</h2>
+                        </div>
+                        <div style={{ background: '#f8f9fa', padding: '1.25rem', borderRadius: '12px', marginBottom: '1.5rem', borderLeft: `6px solid ${personalImpact.sentiment === 'Positive' ? '#22c55e' : personalImpact.sentiment === 'Negative' ? '#ef4444' : '#6b7280'}` }}>
+                            {loadingPersonal && <Loader2 className="animate-spin" size={24} style={{ marginBottom: '10px' }} />}
+                            <p style={{ fontSize: '1.1rem', lineHeight: '1.6', margin: 0, color: '#1a1a1a' }}>{personalImpact.explanation}</p>
+                            <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#666' }}>SITUATION SENTIMENT:</span>
+                                <span style={{ 
+                                    padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, 
+                                    background: personalImpact.sentiment === 'Positive' ? '#dcfce7' : personalImpact.sentiment === 'Negative' ? '#fee2e2' : '#f3f4f6',
+                                    color: personalImpact.sentiment === 'Positive' ? '#166534' : personalImpact.sentiment === 'Negative' ? '#991b1b' : '#374151'
+                                }}>
+                                    {personalImpact.sentiment.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                        <Button label="Close" onPress={() => setPersonalImpact(null)} />
+                    </div>
+                </div>
+            )}
+
             {bills.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
                     <FileText size={48} color="#ccc" style={{ marginBottom: '1rem' }} />
@@ -119,6 +182,33 @@ export const BillsPage: React.FC = () => {
                             boxShadow: 'var(--shadow)'
                         }}>
                             <h2 style={{ fontSize: '1.4rem', color: 'var(--primary)', marginBottom: '0.5rem' }}>{bill.title}</h2>
+                            
+                            {/* Personalized Impact Pills */}
+                            {/* @ts-ignore */}
+                            {bill.matching_topics && bill.matching_topics.length > 0 && (
+                                <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                    {/* @ts-ignore */}
+                                    {bill.matching_topics.map(topic => (
+                                        <button 
+                                            key={topic} 
+                                            onClick={() => handlePersonalImpact(bill.id, topic)}
+                                            style={{ 
+                                                background: '#22c55e', color: 'white', border: 'none', padding: '6px 14px', 
+                                                borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', 
+                                                display: 'flex', alignItems: 'center', gap: '6px', transition: 'transform 0.2s',
+                                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                            }}
+                                            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                                            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        >
+                                            <Target size={14} />
+                                            Tracking: {topic}
+                                            <Info size={12} style={{ opacity: 0.8 }} />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
                             {bill.date && (
                                 <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem', fontWeight: 500 }}>
                                     Dated: {new Date(bill.date).toLocaleDateString()}

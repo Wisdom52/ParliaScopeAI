@@ -186,6 +186,7 @@ backend/scripts/test_*.py
 backend/scripts/debug_*.py
 backend/scripts/verify_*.py
 backend/scripts/fix_*.py
+backend/scripts/repair_*.py
 *.log
 backend/*.html
 tmp/

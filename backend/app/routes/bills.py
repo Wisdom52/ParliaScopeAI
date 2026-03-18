@@ -4,16 +4,29 @@ from typing import List
 
 from app.database import get_db
 from app.models.bill import Bill, BillImpact
-from app.schemas import BillOut, BillCreate, BillImpactOut
-from app.services.impact_agent import generate_bill_impact
-from app.routes.auth import get_current_user
+from app.schemas import BillOut, BillCreate, BillImpactOut, PersonalizedImpact
+from app.services.impact_agent import generate_bill_impact, generate_personalized_impact
+from app.routes.auth import get_current_user, get_current_user_optional
+from app.models.user import User
+from typing import Optional
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
 @router.get("/", response_model=List[BillOut])
-def get_bills(db: Session = Depends(get_db)):
-    """Fetch all bills with their associated impact cards."""
+def get_bills(db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Fetch all bills. If authenticated, identify matching topics from user subscriptions."""
     bills = db.query(Bill).order_by(Bill.created_at.desc()).all()
+    
+    user_topics = []
+    if current_user:
+        # User defined topics from subscriptions
+        user_topics = [s.topic for s in current_user.subscriptions if s.topic]
+    
+    for bill in bills:
+        # Simple high-performance matching logic
+        bill_content = f"{bill.title} {bill.summary or ''}".lower()
+        bill.matching_topics = [t for t in user_topics if t.lower() in bill_content]
+        
     return bills
 
 @router.get("/{bill_id}", response_model=BillOut)
@@ -72,3 +85,23 @@ def analyze_bill(bill_id: int, raw_text: str, background_tasks: BackgroundTasks,
     background_tasks.add_task(background_analyze_bill, bill.id, db, raw_text)
     
     return {"message": "Bill analysis started in the background. Impacts will appear shortly."}
+
+@router.get("/{bill_id}/personalized-impact", response_model=PersonalizedImpact)
+def get_personalized_impact_endpoint(
+    bill_id: int, 
+    topic: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate an on-demand AI impact explanation for a specific user-defined topic.
+    """
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+        
+    # Combine title and summary for context. 
+    # For on-demand details, the summary is a rich source.
+    context_text = f"BILL TITLE: {bill.title}\n\nSUMMARY:\n{bill.summary or 'No summary available.'}"
+    
+    impact = generate_personalized_impact(context_text, topic)
+    return impact
