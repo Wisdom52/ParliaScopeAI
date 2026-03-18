@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { Button } from '../components/ui/Button';
 import { ImpactCard } from '../components/ImpactCard';
+import { AudioPlayer } from '../components/ui/AudioPlayer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,6 +20,8 @@ interface Bill {
     id: number;
     title: string;
     summary: string;
+    date: string | null;
+    document_url: string;
     impacts: any[];
 }
 
@@ -264,7 +267,7 @@ export const SearchScreen = () => {
                             </View>
                             <View style={styles.docInfo}>
                                 <Text style={styles.docTitle}>{item.title}</Text>
-                                <Text style={styles.docDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
+                                <Text style={styles.docDate}>{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</Text>
                                 <Text style={styles.docSnippet} numberOfLines={2}>{item.ai_summary || "Summary pending..."}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color="#ccc" />
@@ -285,7 +288,7 @@ export const SearchScreen = () => {
                                 setSelectedDoc({
                                     ...item,
                                     ai_summary: item.summary,
-                                    pdf_url: item.pdf_url || ''
+                                    pdf_url: item.document_url || ''
                                 }); 
                                 setChatMessages([]); 
                                 setAudioData(null); 
@@ -295,7 +298,15 @@ export const SearchScreen = () => {
                                 <MaterialCommunityIcons name="gavel" size={24} color="#10B981" />
                             </View>
                             <View style={styles.docInfo}>
-                                <Text style={styles.docTitle}>{item.title}</Text>
+                                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2}}>
+                                    <Text style={[styles.docTitle, {flex: 1, marginRight: 8}]}>{item.title}</Text>
+                                    <View style={{alignItems: 'flex-end'}}>
+                                      <View style={{ backgroundColor: '#f0fdf4', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, marginBottom: 2}}>
+                                        <Text style={{fontSize: 10, color: '#888', fontWeight: 'bold'}}>Bill</Text>
+                                      </View>
+                                    </View>
+                                </View>
+                                <Text style={styles.docDate}>{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</Text>
                                 <Text style={styles.docSnippet} numberOfLines={2}>{item.summary || "Analysis pending..."}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color="#ccc" />

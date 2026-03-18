@@ -60,29 +60,34 @@ def match_speaker(name: str, db: Session) -> Speaker:
     Attempts to match the extracted speaker name to a DB record using fuzzy matching.
     Includes normalization for parliamentary titles like "Hon." or "The Speaker".
     """
-    # 1. Normalize the name for better matching
-    # Remove common prefixes and titles
     clean_name = name.strip()
-    # If the format is "The Speaker (Hon. Moses Wetang’ula)", extract what's inside the parentheses
-    paren_match = re.search(r'\((.*?)\)', clean_name)
-    if paren_match:
-        clean_name = paren_match.group(1)
     
+    # Extract everything inside parentheses
+    paren_match = re.search(r'\((.*?)\)', clean_name)
+    inside_paren = paren_match.group(1) if paren_match else ""
+    
+    # Remove the parentheses and their contents from the main string
+    outside_paren = re.sub(r'\(.*?\)', '', clean_name).strip()
+    
+    # Heuristic: If outside_paren is just a generic title, the actual name is probably inside the parentheses.
+    generic_titles = ["the speaker", "the temporary speaker", "the deputy speaker", "chairperson"]
+    if outside_paren.lower() in generic_titles and inside_paren:
+        candidate_name = inside_paren
+    else:
+        # Otherwise, the name is likely outside the parentheses (e.g., "Hon. Junet Mohamed (Suna East)")
+        candidate_name = outside_paren
+        
     # Remove standard titles for the match search
-    clean_name = re.sub(r'\b(Hon\.|Hon|Dr\.|Dr|The Speaker|The Temporary Speaker|The|Senator|MP)\b', '', clean_name, flags=re.IGNORECASE).strip()
+    candidate_name = re.sub(r'\b(Hon\.|Hon|Dr\.|Dr|The Speaker|The Temporary Speaker|The|Senator|MP)\b', '', candidate_name, flags=re.IGNORECASE).strip()
 
-    # Get all speakers from DB
     speakers = db.query(Speaker).all()
     if not speakers:
         return None
         
     speaker_names = [s.name for s in speakers]
-    # Also create a list of "cleaned" speaker names from the DB for more accurate comparison
-    # But we match against the official name for the final selection
     
     # 2. Fuzzy match
-    # We use a slightly more flexible threshold (75) to account for slight variations in transcripts
-    best_match, score = process.extractOne(clean_name, speaker_names)
+    best_match, score = process.extractOne(candidate_name, speaker_names)
     
     if score >= 75: 
         matched_obj = next((s for s in speakers if s.name == best_match), None)
