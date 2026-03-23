@@ -12,7 +12,7 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, token }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'system'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'system' | 'database'>('overview');
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     
@@ -24,6 +24,11 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
     const [logs, setLogs] = useState<string>('');
     const [notifications, setNotifications] = useState<any[]>([]);
     const [userTab, setUserTab] = useState<'citizens' | 'leaders'>('citizens');
+    
+    // Database inspection states
+    const [tables, setTables] = useState<string[]>([]);
+    const [selectedTable, setSelectedTable] = useState<string | null>(null);
+    const [tableData, setTableData] = useState<any>(null);
     
     // Modal state for leader review
     const [reviewClaim, setReviewClaim] = useState<any>(null);
@@ -62,12 +67,34 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (nRes.ok) setNotifications(await nRes.json());
+            } else if (activeTab === 'database') {
+                const res = await fetch(`${API_BASE_URL}/admin/db/tables`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) setTables(await res.json());
             }
         } catch (e) {
             console.error("Fetch failed", e);
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    };
+
+    const fetchTableData = async (tableName: string) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/db/table/${tableName}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setTableData(await res.json());
+                setSelectedTable(tableName);
+            }
+        } catch (e) {
+            console.error("Table fetch failed", e);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -362,6 +389,64 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
         </View>
     );
 
+    const renderDatabase = () => (
+        <View style={styles.tabContent}>
+            {selectedTable ? (
+                <View style={{ flex: 1 }}>
+                    <View style={styles.tableHeader}>
+                        <TouchableOpacity onPress={() => setSelectedTable(null)} style={styles.backBtn}>
+                            <MaterialCommunityIcons name="arrow-left" size={20} color="#007AFF" />
+                            <Text style={styles.backBtnText}>Back to Tables</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.tableNameTitle}>{selectedTable}</Text>
+                    </View>
+                    <ScrollView horizontal>
+                        <View>
+                            <View style={styles.gridRowHeader}>
+                                {tableData?.columns.map((col: string) => (
+                                    <View key={col} style={styles.gridHeaderCell}>
+                                        <Text style={styles.gridHeaderText}>{col}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                            <FlatList
+                                data={tableData?.rows}
+                                keyExtractor={(_, idx) => idx.toString()}
+                                renderItem={({ item }) => (
+                                    <View style={styles.gridRow}>
+                                        {tableData?.columns.map((col: string) => (
+                                            <View key={col} style={styles.gridCell}>
+                                                <Text style={styles.gridCellText} numberOfLines={2}>
+                                                    {typeof item[col] === 'object' ? JSON.stringify(item[col]) : String(item[col])}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+                            />
+                        </View>
+                    </ScrollView>
+                </View>
+            ) : (
+                <FlatList
+                    data={tables}
+                    keyExtractor={(item) => item}
+                    contentContainerStyle={{ padding: 15 }}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity style={styles.tableListItem} onPress={() => fetchTableData(item)}>
+                            <View style={styles.tableInfo}>
+                                <MaterialCommunityIcons name="table" size={24} color="#8E8E93" />
+                                <Text style={styles.tableListName}>{item}</Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={20} color="#C7C7CC" />
+                        </TouchableOpacity>
+                    )}
+                    ListHeaderComponent={<Text style={styles.sectionTitle}>Database Tables</Text>}
+                />
+            )}
+        </View>
+    );
+
     const renderSystem = () => (
         <ScrollView 
             style={styles.tabContent}
@@ -425,6 +510,9 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
                 <TouchableOpacity onPress={() => setActiveTab('system')} style={[styles.mainTab, activeTab === 'system' && styles.mainTabActive]}>
                     <Text style={[styles.mainTabText, activeTab === 'system' && styles.mainTabTextActive]}>System</Text>
                 </TouchableOpacity>
+                <TouchableOpacity onPress={() => setActiveTab('database')} style={[styles.mainTab, activeTab === 'database' && styles.mainTabActive]}>
+                    <Text style={[styles.mainTabText, activeTab === 'database' && styles.mainTabTextActive]}>Database</Text>
+                </TouchableOpacity>
             </View>
 
             {loading && !refreshing && (
@@ -434,7 +522,9 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
             )}
 
             <View style={{ flex: 1 }}>
-                {activeTab === 'overview' ? renderOverview() : activeTab === 'users' ? renderUsers() : renderSystem()}
+                {activeTab === 'overview' ? renderOverview() : 
+                 activeTab === 'users' ? renderUsers() : 
+                 activeTab === 'system' ? renderSystem() : renderDatabase()}
             </View>
         </SafeAreaView>
     );
@@ -518,5 +608,20 @@ const styles = StyleSheet.create({
     approveBtn: { backgroundColor: '#007AFF', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 30, marginBottom: 20 },
     approveBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
     
-    absoluteLoading: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 100 }
+    absoluteLoading: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+    
+    // Database tab styles
+    tableListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10 },
+    tableInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    tableListName: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
+    tableHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E5EA', gap: 15 },
+    backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    backBtnText: { color: '#007AFF', fontWeight: '600', fontSize: 14 },
+    tableNameTitle: { fontSize: 16, fontWeight: '800', color: '#1C1C1E' },
+    gridRowHeader: { flexDirection: 'row', backgroundColor: '#F2F2F7', borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
+    gridHeaderCell: { width: 150, padding: 10, borderRightWidth: 1, borderRightColor: '#E5E5EA' },
+    gridHeaderText: { fontSize: 12, fontWeight: '800', color: '#8E8E93', textTransform: 'uppercase' },
+    gridRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
+    gridCell: { width: 150, padding: 10, borderRightWidth: 1, borderRightColor: '#F2F2F7', justifyContent: 'center' },
+    gridCellText: { fontSize: 13, color: '#1C1C1E' }
 });

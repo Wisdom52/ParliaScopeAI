@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Calendar, User, Users, MessageSquare, Shield, Activity } from 'lucide-react';
+import { FileText, Calendar, User, Users, MessageSquare, Shield, Activity, Database } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Onboarding } from './pages/Onboarding';
 import { ProfilePage } from './pages/ProfilePage';
@@ -10,10 +10,11 @@ import { BarazaPage } from './pages/BarazaPage';
 import { AdminOverviewPage } from './pages/AdminOverviewPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSystemPage } from './pages/AdminSystemPage';
+import { AdminDatabasePage } from './pages/AdminDatabasePage';
 import { LeaderDashboard } from './pages/LeaderDashboard';
 import './App.css';
 
-type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza' | 'admin_overview' | 'admin_users' | 'admin_system' | 'leader_portal';
+type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza' | 'admin_overview' | 'admin_users' | 'admin_system' | 'admin_database' | 'leader_portal';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'daily', label: 'Daily', icon: <Calendar size={18} /> },
@@ -24,6 +25,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boole
   { id: 'admin_overview', label: 'Overview', icon: <Activity size={18} />, adminOnly: true },
   { id: 'admin_users', label: 'Users', icon: <Users size={18} />, adminOnly: true },
   { id: 'admin_system', label: 'System', icon: <Shield size={18} />, adminOnly: true },
+  { id: 'admin_database', label: 'Database', icon: <Database size={18} />, adminOnly: true },
   { id: 'profile', label: 'Profile', icon: <User size={18} /> },
 ];
 
@@ -33,7 +35,7 @@ function AppContent() {
 
   // Ensure leaders are not on restricted tabs
   useEffect(() => {
-    if (user?.is_admin && !['admin_overview', 'admin_users', 'admin_system', 'profile'].includes(activeTab)) {
+    if (user?.is_admin && !['admin_overview', 'admin_users', 'admin_system', 'admin_database', 'profile'].includes(activeTab)) {
         setActiveTab('admin_overview');
     }
     else if (user?.role === 'LEADER' && (activeTab === 'daily' || activeTab === 'docs')) {
@@ -94,6 +96,7 @@ function AppContent() {
         {activeTab === 'admin_overview' && user?.is_admin && <AdminOverviewPage />}
         {activeTab === 'admin_users' && user?.is_admin && <AdminUsersPage />}
         {activeTab === 'admin_system' && user?.is_admin && <AdminSystemPage />}
+        {activeTab === 'admin_database' && user?.is_admin && <AdminDatabasePage />}
         {activeTab === 'profile' && (
           user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => setActiveTab('profile')} />
         )}

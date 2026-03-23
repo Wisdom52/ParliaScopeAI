@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import select, inspect, text
 from typing import List
 import os
 
@@ -206,3 +207,50 @@ def mark_notification_read(
     notif.is_read = True
     db.commit()
     return {"status": "success"}
+@router.get("/db/tables")
+def list_db_tables(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """List all tables in the database."""
+    inspector = inspect(db.get_bind())
+    return inspector.get_table_names()
+
+@router.get("/db/table/{table_name}")
+def get_table_data(
+    table_name: str,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Fetch raw data from a specific table."""
+    try:
+        inspector = inspect(db.get_bind())
+        if table_name not in inspector.get_table_names():
+            raise HTTPException(status_code=404, detail="Table not found")
+            
+        result = db.execute(text(f"SELECT * FROM {table_name} LIMIT :limit OFFSET :offset"), {"limit": limit, "offset": offset})
+        columns = result.keys()
+        rows = []
+        for row in result:
+            # Convert row to dict, handling non-serializable types if needed
+            row_dict = {}
+            for i, col in enumerate(columns):
+                val = row[i]
+                # Basic serialization for common types that might cause JSON issues
+                if hasattr(val, 'isoformat'): # datetime
+                    val = val.isoformat()
+                elif isinstance(val, (bytes, bytearray)):
+                    val = "<binary data>"
+                row_dict[col] = val
+            rows.append(row_dict)
+            
+        return {
+            "table": table_name,
+            "columns": list(columns),
+            "rows": rows
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch data for table {table_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
