@@ -158,10 +158,28 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
             });
             if (res.ok) {
                 const data = await res.json();
-                Alert.alert("Success", `Ingestion complete: ${data.summary?.total_processed} items.`);
+                Alert.alert("Success", `Hansard Ingestion complete: ${data.summary?.total_processed} items.`);
             }
         } catch (e) {
             Alert.alert("Error", "Ingestion failed");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTriggerBillIngest = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/ingest/crawl/bills?limit=10`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                Alert.alert("Success", `Bill Ingestion complete: ${data.ingested?.length || 0} new bills.`);
+            }
+        } catch (e) {
+            Alert.alert("Error", "Bill Sync failed");
         } finally {
             setLoading(false);
         }
@@ -465,7 +483,24 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
                         {loading ? <ActivityIndicator color="#fff" /> : (
                             <>
                                 <MaterialCommunityIcons name="sync" size={20} color="#fff" />
-                                <Text style={styles.triggerBtnText}>Trigger Full Sync</Text>
+                                <Text style={styles.triggerBtnText}>Trigger Hansard Sync</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                <View style={[styles.card, { marginTop: 15 }]}>
+                    <Text style={styles.cardTitle}>2026 Bill Sync</Text>
+                    <Text style={styles.cardDesc}>Crawl parliament.go.ke for 2026 documents & generate AI impacts (OCR enabled).</Text>
+                    <TouchableOpacity 
+                        style={[styles.triggerBtn, { backgroundColor: '#34C759' }]} 
+                        onPress={handleTriggerBillIngest}
+                        disabled={loading}
+                    >
+                        {loading ? <ActivityIndicator color="#fff" /> : (
+                            <>
+                                <MaterialCommunityIcons name="gavel" size={20} color="#fff" />
+                                <Text style={styles.triggerBtnText}>Trigger Bill Sync</Text>
                             </>
                         )}
                     </TouchableOpacity>

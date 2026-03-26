@@ -53,7 +53,7 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
                     
                     try:
                         logger.info(f"Starting Impact Analysis for: {link['title']}")
-                        raw_text = extract_raw_text(tmp_path)
+                        raw_text = await extract_raw_text(tmp_path)
                         if raw_text:
                             # Generate AI-powered structured bill summary
                             logger.info(f"Generating AI summary for Bill: {link['title']}")

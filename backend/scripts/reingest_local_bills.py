@@ -31,7 +31,7 @@ async def process_local_bill(db, filename, filepath):
     
     logger.info(f"Processing Local Bill: {title}")
     
-    raw_text = extract_raw_text(filepath)
+    raw_text = await extract_raw_text(filepath)
     if not raw_text:
         logger.warning(f"No text extracted from {filename} (likely a scanned image). Starting OCR...")
         raw_text = await extract_text_via_ocr(filepath, max_pages=10) # Limit to 10 pages for speed

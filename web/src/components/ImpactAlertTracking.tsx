@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Target, X, Zap } from 'lucide-react';
+import { Target, X, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 
-export const PersonalImpactCard: React.FC = () => {
+export const ImpactAlertTracking: React.FC = () => {
     const { token } = useAuth();
     const [subscriptions, setSubscriptions] = useState<any[]>([]);
     const [newTopic, setNewTopic] = useState('');
@@ -12,7 +12,8 @@ export const PersonalImpactCard: React.FC = () => {
 
     const fetchSubscriptions = async () => {
         try {
-            const response = await fetch('http://localhost:8000/subscriptions/', {
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiBase}/subscriptions/`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.ok) {
@@ -32,7 +33,8 @@ export const PersonalImpactCard: React.FC = () => {
         if (!newTopic.trim()) return;
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/subscriptions/', {
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiBase}/subscriptions/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -53,7 +55,8 @@ export const PersonalImpactCard: React.FC = () => {
 
     const handleDelete = async (id: number) => {
         try {
-            const response = await fetch(`http://localhost:8000/subscriptions/${id}`, {
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiBase}/subscriptions/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -86,15 +89,15 @@ export const PersonalImpactCard: React.FC = () => {
                 fontWeight: 700,
                 borderRadius: '0 0 0 8px'
             }}>
-                AI POWERED
+                AI POWERED ALERTS
             </div>
 
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--primary)' }}>
-                <Target size={20} /> Personal Impact Tracking
+                <Target size={20} /> Personal Impact & Alert Tracking
             </h3>
             
             <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1.25rem', lineHeight: '1.4' }}>
-                Define specific sectors (e.g. Hospitality, Mining, Teachers) you want the AI to track across all new legislation.
+                Define specific sectors (e.g. Hospitality, Mining, Teachers) you want the AI to track. You will receive <strong>instant alerts</strong> when new legislation matching these topics is introduced.
             </p>
 
             <div style={{ marginBottom: '1rem' }}>
@@ -123,7 +126,7 @@ export const PersonalImpactCard: React.FC = () => {
                             fontWeight: 600,
                             border: '1px solid #c3fae8'
                         }}>
-                            <Zap size={12} />
+                            <Bell size={12} />
                             {sub.topic}
                             <button onClick={() => handleDelete(sub.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}>
                                 <X size={14} color="#fa5252" />

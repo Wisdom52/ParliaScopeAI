@@ -28,7 +28,7 @@ def analyze_speaker_consistency(db: Session, speaker_id: int):
     For each topic, determine:
     1. The leader's stance (Supportive/Opposed/Neutral).
     2. A brief analysis of their argument.
-    3. A 'Consistency Score' (0-100) based on whether their stance has changed over these segments.
+    3. A 'Consistency Score' (MUST BE BETWEEN 0 AND 100) based on whether their stance has changed over these segments. 100 means perfectly consistent, 0 means complete reversal.
     
     SPEECH SEGMENTS:
     {context}
@@ -41,12 +41,15 @@ def analyze_speaker_consistency(db: Session, speaker_id: int):
         response = ollama.chat(model='llama3.2:3b', messages=[
             {'role': 'user', 'content': prompt},
         ])
-        raw_json = response['message']['content']
-        # Extract JSON if LLM added markdown
-        if "```json" in raw_json:
-            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw_json:
-            raw_json = raw_json.split("```")[1].split("```")[0].strip()
+        raw_output = response['message']['content']
+        
+        # Robustly extract JSON array using regex to handle conversational text before/after
+        import re
+        json_match = re.search(r'\[.*\]', raw_output, re.DOTALL)
+        if json_match:
+            raw_json = json_match.group(0).strip()
+        else:
+            raw_json = raw_output.strip()
         
         topic_info = json.loads(raw_json)
         
@@ -54,25 +57,31 @@ def analyze_speaker_consistency(db: Session, speaker_id: int):
         stances = []
         overall_score = 0
         for item in topic_info:
+            # Ensure score is on 0-100 scale if LLM mistakenly gave 0-10
+            raw_score = float(item.get('consistency_score', 0))
+            if raw_score <= 10.0 and any(s.get('consistency_score', 0) > 0 for s in topic_info) and all(s.get('consistency_score', 0) <= 10.0 for s in topic_info):
+                # Heuristic: if ALL scores are <= 10, LLM likely used 0-10 scale
+                raw_score = raw_score * 10.0
+            
             stance_record = LeaderStance(
                 speaker_id=speaker_id,
                 topic=item['topic'],
                 stance=item['stance'],
                 analysis=item['analysis'],
-                consistency_score=float(item['consistency_score']),
+                consistency_score=raw_score,
                 evidence_ids=[segments[idx].id for idx in item.get('evidence_ids', []) if idx < len(segments)]
             )
             db.add(stance_record)
             stances.append(stance_record)
-            overall_score += item['consistency_score']
+            overall_score += raw_score
         
         db.commit()
         
-        avg_score = overall_score / len(topic_info) if topic_info else 100
+        avg_score = round(overall_score / len(topic_info), 1) if topic_info else 100.0
         
         return {
             "overall_consistency": avg_score,
-            "summary": f"Based on {len(segments)} segments, the leader shows a consistency score of {avg_score:.1f}% across {len(topic_info)} key topics.",
+            "summary": f"Based on {len(segments)} segments, the leader shows a consistency score of {avg_score}% across {len(topic_info)} key topics.",
             "topic_breakdown": stances
         }
     except Exception as e:

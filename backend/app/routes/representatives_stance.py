@@ -16,8 +16,8 @@ async def get_representative_stances(id: int, db: Session = Depends(get_db)):
     existing_stances = db.execute(stmt).scalars().all()
 
     if existing_stances:
-        # For simplicity, calculate overall consistency from stored records
-        avg_score = sum(s.consistency_score for s in existing_stances) / len(existing_stances)
+        # Calculate overall consistency from stored records with 1 decimal place
+        avg_score = round(sum(s.consistency_score for s in existing_stances) / len(existing_stances), 1)
         return {
             "overall_consistency": avg_score,
             "summary": f"Historical stance analysis for this representative across {len(existing_stances)} topics.",

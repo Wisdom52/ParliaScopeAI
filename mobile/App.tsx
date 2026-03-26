@@ -18,7 +18,6 @@ import { API_BASE_URL } from './config/api';
 type TabId = 'daily' | 'docs' | 'baraza' | 'representative' | 'profile' | 'admin_dash';
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
-    { id: 'daily', label: 'Daily', icon: 'calendar-blank' },
     { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
     { id: 'baraza', label: 'Baraza', icon: 'forum-outline' },
     { id: 'representative', label: 'Leaders', icon: 'account-group-outline' },
@@ -30,7 +29,7 @@ const ADMIN_TABS: TabId[] = ['admin_dash', 'profile'];
 
 export default function App() {
     const [user, setUser] = useState<any>(null);
-    const [activeTab, setActiveTab] = useState<TabId>('daily');
+    const [activeTab, setActiveTab] = useState<TabId>('docs');
     const [token, setToken] = useState<string | null>(null);
 
     const checkAuth = async () => {
@@ -78,7 +77,7 @@ export default function App() {
         await AsyncStorage.removeItem('parliaScope_token');
         setUser(null);
         setToken(null);
-        setActiveTab('daily');
+        setActiveTab('docs');
     };
 
     return (
@@ -90,7 +89,6 @@ export default function App() {
 
             <View style={styles.content}>
                 {/* Tab Content */}
-                {activeTab === 'daily' && <DailyScreen />}
                 {activeTab === 'docs' && <SearchScreen />}
                 {activeTab === 'baraza' && <BarazaScreen onSwitchToProfile={() => setActiveTab('profile')} user={user} />}
                 {activeTab === 'representative' && (

@@ -4,8 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Input } from '../components/ui/Input';
-import { AlertSettings } from '../components/AlertSettings';
-import { PersonalImpactCard } from '../components/PersonalImpactCard';
+import { ImpactAlertTracking } from '../components/ImpactAlertTracking';
 import { Switch } from 'react-native';
 
 interface ProfileScreenProps {
@@ -279,8 +278,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                     </View>
                 )}
 
-                {/* Personal Impact Tracking Module (Citizens only) */}
-                {user?.role !== 'LEADER' && !user?.is_admin && <PersonalImpactCard token={token} />}
+                {/* Unified Impact & Alert Tracking (Citizens only) */}
+                {user?.role !== 'LEADER' && !user?.is_admin && <ImpactAlertTracking token={token} />}
 
                 {/* Baraza Privacy Settings */}
                 {user?.role !== 'LEADER' && !user?.is_admin && (
@@ -304,9 +303,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, token, onUpd
                         </View>
                     </View>
                 )}
-
-                {/* Alert Settings Component (Citizens Only) */}
-                {user?.role !== 'LEADER' && !user?.is_admin && <AlertSettings token={token} />}
             </View>
 
             {isEditing && (

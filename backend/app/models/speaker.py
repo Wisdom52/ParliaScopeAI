@@ -13,8 +13,6 @@ class Speaker(Base):
     county_id = Column(Integer, ForeignKey("counties.id"), nullable=True) # For Senators or identification
     party = Column(String, nullable=True)
     bio = Column(String, nullable=True)
-    education = Column(String, nullable=True)
-    experience = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
     constituency_name = Column(String, nullable=True)  # Direct text storage — no join needed
     county_name = Column(String, nullable=True)

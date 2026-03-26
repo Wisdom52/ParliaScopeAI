@@ -12,7 +12,8 @@ router = APIRouter(prefix="/search", tags=["Search"])
 class SearchResult(BaseModel):
     id: int
     speaker_name: str
-    content: str
+    snippet: str          # First 200 chars with query term highlighted
+    content_length: int   # Full content length so UI can show "Read more"
     created_at: datetime
     
     class Config:
@@ -42,7 +43,33 @@ def search_hansard(
     log_search(db, q)
     
     results = hybrid_search(db, q, limit=20, filters=filters)
-    return results
+
+    def make_snippet(content: str, query: str, length: int = 200) -> str:
+        """Return a short excerpt centred on the first match, with match bolded."""
+        lower = content.lower()
+        pos = lower.find(query.lower())
+        if pos == -1:
+            excerpt = content[:length]
+        else:
+            start = max(0, pos - 80)
+            excerpt = content[start:start + length]
+        # Bold the matching term (markdown convention used by the chat renderer)
+        import re
+        excerpt = re.sub(re.escape(query), f"**{query}**", excerpt, flags=re.IGNORECASE)
+        if len(content) > length:
+            excerpt += "…"
+        return excerpt
+
+    return [
+        SearchResult(
+            id=r.id,
+            speaker_name=r.speaker_name,
+            snippet=make_snippet(r.content, q),
+            content_length=len(r.content),
+            created_at=r.created_at,
+        )
+        for r in results
+    ]
 
 @router.get("/history", response_model=List[HistoryItem])
 def get_search_history(db: Session = Depends(get_db)):

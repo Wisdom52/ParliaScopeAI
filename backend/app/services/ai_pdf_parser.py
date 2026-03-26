@@ -8,6 +8,7 @@ from app.models.speech import SpeechSegment
 from app.models.speaker import Speaker
 from app.services.embedding import get_embedding
 from app.services.pdf_parser import match_speaker
+from app.services.ocr_service import extract_text_via_ocr
 import os
 import asyncio
 
@@ -148,7 +149,7 @@ async def generate_bill_summary(text: str) -> str:
             return "Summary generation failed (Exception)."
     return "Summary unavailable."
 
-def extract_raw_text(pdf_path: str) -> str:
+async def extract_raw_text(pdf_path: str) -> str:
     text = ""
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -156,6 +157,12 @@ def extract_raw_text(pdf_path: str) -> str:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
+        
+        # Fallback to OCR if no text extracted (likely a scanned image)
+        if not text.strip():
+            logger.info(f"No selectable text found in {pdf_path}. Attempting OCR...")
+            text = await extract_text_via_ocr(pdf_path, max_pages=15)
+            
     except Exception as e:
         logger.error(f"Error extracting text from PDF {pdf_path}: {e}")
     return text
@@ -249,7 +256,7 @@ async def process_hansard_with_ai(pdf_path: str, db: Session, hansard_id: int):
     3. AI Extraction
     4. Database Persistence
     """
-    raw_text = await asyncio.to_thread(extract_raw_text, pdf_path)
+    raw_text = await extract_raw_text(pdf_path)
     if not raw_text:
         return 0
 

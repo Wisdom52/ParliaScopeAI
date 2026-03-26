@@ -17,7 +17,6 @@ import './App.css';
 type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza' | 'admin_overview' | 'admin_users' | 'admin_system' | 'admin_database' | 'leader_portal';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
-  { id: 'daily', label: 'Daily', icon: <Calendar size={18} /> },
   { id: 'docs', label: 'Docs', icon: <FileText size={18} /> },
   { id: 'baraza', label: 'Baraza', icon: <MessageSquare size={18} /> },
   { id: 'representative', label: 'Leaders', icon: <Users size={18} /> },
@@ -31,7 +30,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boole
 
 function AppContent() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('daily');
+  const [activeTab, setActiveTab] = useState<TabId>('docs');
 
   // Ensure leaders are not on restricted tabs
   useEffect(() => {
@@ -45,7 +44,7 @@ function AppContent() {
 
   const handleLogout = () => {
     logout();
-    setActiveTab('daily');
+    setActiveTab('docs');
   };
 
   const handleTabClick = (tabId: TabId) => {
@@ -88,7 +87,6 @@ function AppContent() {
 
       {/* Tab Content */}
       <main className="tab-content">
-        {activeTab === 'daily' && <DailyPage />}
         {activeTab === 'docs' && <SearchPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'baraza' && <BarazaPage onSwitchToProfile={() => setActiveTab('profile')} />}
         {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={() => setActiveTab('profile')} />}

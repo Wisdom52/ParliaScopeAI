@@ -165,8 +165,6 @@ class SpeakerBase(BaseModel):
     constituency_id: Optional[int] = None
     county_id: Optional[int] = None
     bio: Optional[str] = None
-    education: Optional[str] = None
-    experience: Optional[str] = None
     image_url: Optional[str] = None
     sittings_attended: int = 0
     votes_cast: int = 0

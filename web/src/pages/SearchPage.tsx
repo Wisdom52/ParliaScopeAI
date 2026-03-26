@@ -42,6 +42,82 @@ interface FactShieldResult {
     sources: FactShieldSource[];
 }
 
+const MemoizedChatInput = React.memo(({ onSend, disabled }: { onSend: (msg: string) => void; disabled: boolean }) => {
+    const [input, setInput] = useState('');
+    const submit = () => {
+        if (input.trim() && !disabled) {
+            onSend(input);
+            setInput('');
+        }
+    };
+    return (
+        <div style={{ padding: '1.5rem', borderTop: '1px solid #f0f0f0' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', padding: '0.5rem', borderRadius: '1.5rem', border: '1px solid #e2e8f0' }}>
+                <input
+                    type="text"
+                    placeholder="Ask about speakers, topics, or full questions..."
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submit()}
+                    style={{ flex: 1, background: 'transparent', border: 'none', padding: '0.5rem 1rem', outline: 'none', fontSize: '0.95rem' }}
+                />
+                <button
+                    onClick={submit}
+                    disabled={disabled || !input.trim()}
+                    style={{
+                        background: 'var(--primary)',
+                        border: 'none',
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        cursor: 'pointer',
+                        transition: 'opacity 0.2s'
+                    }}
+                >
+                    <Send size={18} />
+                </button>
+            </div>
+        </div>
+    );
+});
+
+const MemoizedFactShieldInput = React.memo(({ onVerify, loading }: { onVerify: (url: string, claim: string) => void; loading: boolean }) => {
+    const [url, setUrl] = useState('');
+    const [claim, setClaim] = useState('');
+    return (
+        <div style={{ display: 'grid', gap: '1.5rem', maxWidth: '800px' }}>
+            <div className="input-field">
+                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.5rem', color: '#334155' }}>External Link (YouTube, Article, etc.)</label>
+                <input
+                    type="text"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none' }}
+                />
+            </div>
+            <div className="input-field">
+                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.5rem', color: '#334155' }}>Specific Claim or Context (Optional)</label>
+                <textarea
+                    placeholder="e.g. The MP for Lang'ata claimed that the new bill would reduce taxes by 20%..."
+                    value={claim}
+                    onChange={(e) => setClaim(e.target.value)}
+                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', minHeight: '100px', resize: 'vertical' }}
+                />
+            </div>
+            <Button
+                label={loading ? "Verifying..." : "Verify Claim"}
+                onPress={() => onVerify(url, claim)}
+                disabled={loading || (!claim.trim() && !url.trim())}
+            />
+        </div>
+    );
+});
+
 interface SearchPageProps {
     onSwitchToProfile?: () => void;
 }
@@ -66,20 +142,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
 
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-    const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
 
     // Fact Check State
-    const [factClaim, setFactClaim] = useState('');
-    const [factUrl, setFactUrl] = useState('');
     const [factResult, setFactResult] = useState<FactShieldResult | null>(null);
     const [factLoading, setFactLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
-    const fetchDocs = async () => {
+    const fetchDocs = async (query = '') => {
         setDocsLoading(true);
         try {
-            const res = await fetch('http://localhost:8000/hansards/');
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const res = await fetch(`${apiBase}/hansards/?q=${encodeURIComponent(query)}`);
             if (res.ok) setDocuments(await res.json());
         } catch (e: any) {
             console.error("Docs fetch failed", e);
@@ -88,10 +162,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
         }
     };
 
-    const fetchBills = async () => {
+    const fetchBills = async (query = '') => {
         setBillsLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/bills/');
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiBase}/bills/?q=${encodeURIComponent(query)}`);
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -119,15 +194,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
     };
 
     useEffect(() => {
-        fetchDocs();
-        fetchBills();
-    }, []);
-
-    useEffect(() => {
-        if (activeCategory === 'bills') {
-            fetchBills();
-        }
-    }, [activeCategory]);
+        const timeoutId = setTimeout(() => {
+            if (activeCategory === 'parliament') {
+                fetchDocs(searchQuery);
+            } else if (activeCategory === 'bills') {
+                fetchBills(searchQuery);
+            }
+        }, 300);
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery, activeCategory]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -141,13 +216,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
         return true;
     };
 
-    const handleSendChat = async () => {
-        if (!chatInput.trim() || !ensureLoggedIn()) return;
+    const handleSendChat = async (message: string) => {
+        if (!message.trim() || !ensureLoggedIn()) return;
 
-        const userMsg: ChatMessage = { role: 'user', content: chatInput };
+        const userMsg: ChatMessage = { role: 'user', content: message };
         setChatMessages(prev => [...prev, userMsg]);
         setChatLoading(true);
-        setChatInput('');
 
         try {
             const docId = selectedHansard?.id;
@@ -208,8 +282,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
         }
     };
 
-    const handleFactCheck = async () => {
-        if (!factClaim.trim() && !factUrl.trim()) return;
+    const handleFactCheck = async (url: string, claim: string) => {
+        if (!claim.trim() && !url.trim()) return;
         setFactLoading(true);
         setFactResult(null);
         try {
@@ -220,7 +294,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                     'Content-Type': 'application/json',
                     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
                 },
-                body: JSON.stringify({ url: factUrl, claim_text: factClaim }),
+                body: JSON.stringify({ url: url, claim_text: claim }),
             });
             if (response.ok) {
                 setFactResult(await response.json());
@@ -231,14 +305,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
             setFactLoading(false);
         }
     };
-
-    const filteredDocs = documents.filter(doc =>
-        doc.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const filteredBills = bills.filter(bill =>
-        bill.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
 
     return (
         <div className="search-page-container">
@@ -342,17 +408,46 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                         </div>
                         {docsLoading ? (
                             <div style={{ textAlign: 'center', padding: '3rem' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></div>
-                        ) : filteredDocs.length > 0 ? (
+                        ) : documents.length > 0 ? (
                             <div className="docs-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                                {filteredDocs.map(doc => (
+                                {documents.map((doc, index) => (
                                     <div
                                         key={doc.id}
                                         className="doc-card"
                                         onClick={() => { setSelectedHansard(doc); setChatMessages([]); setAudioData(null); }}
-                                        style={{ padding: '1.25rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'white', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                                        style={{ 
+                                            padding: '1.25rem', 
+                                            border: index === 0 ? '1px solid #10B981' : '1px solid var(--border)', 
+                                            borderRadius: 'var(--radius)', 
+                                            background: 'white', 
+                                            cursor: 'pointer', 
+                                            transition: 'all 0.2s', 
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                            position: 'relative'
+                                        }}
                                         onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                                         onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                                     >
+                                        {index === 0 && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '1rem',
+                                                right: '1rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                background: '#f0fdf4',
+                                                padding: '0.2rem 0.6rem',
+                                                borderRadius: '1rem',
+                                                fontSize: '0.7rem',
+                                                fontWeight: '700',
+                                                color: '#166534',
+                                                border: '1px solid #bbf7d0'
+                                            }}>
+                                                <div style={{ width: '6px', height: '6px', background: '#10B981', borderRadius: '50%' }}></div>
+                                                NEWEST
+                                            </div>
+                                        )}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                             <div style={{ padding: '0.5rem', background: '#F0F9FF', borderRadius: '10px' }}><FileText size={20} color="#007AFF" /></div>
                                             <span style={{ fontSize: '0.75rem', color: '#888' }}>{doc.date ? new Date(doc.date).toLocaleDateString() : 'N/A'}</span>
@@ -381,22 +476,51 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                         </div>
                         {billsLoading ? (
                             <div style={{ textAlign: 'center', padding: '3rem' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></div>
-                        ) : filteredBills.length === 0 ? (
+                        ) : bills.length === 0 ? (
                             <div style={{ padding: '4rem', textAlign: 'center', background: '#f8f9fa', borderRadius: 'var(--radius)', color: '#666' }}>
                                 <Search size={40} style={{ opacity: 0.2, marginBottom: '1rem' }} />
                                 <p>No bills found matching "{searchQuery}"</p>
                             </div>
                         ) : (
                             <div className="docs-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                                {filteredBills.map(bill => (
+                                {bills.map((bill, index) => (
                                     <div
                                         key={bill.id}
                                         className="doc-card"
                                         onClick={() => { setSelectedHansard({ id: bill.id, title: bill.title, ai_summary: bill.summary, date: '', created_at: '', pdf_url: bill.document_url }); setChatMessages([]); setAudioData(null); }}
-                                        style={{ padding: '1.25rem', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'white', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                                        style={{ 
+                                            padding: '1.25rem', 
+                                            border: index === 0 ? '1px solid #10B981' : '1px solid var(--border)', 
+                                            borderRadius: 'var(--radius)', 
+                                            background: 'white', 
+                                            cursor: 'pointer', 
+                                            transition: 'all 0.2s', 
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                            position: 'relative'
+                                        }}
                                         onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                                         onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                                     >
+                                        {index === 0 && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '1rem',
+                                                right: '1rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                background: '#f0fdf4',
+                                                padding: '0.2rem 0.6rem',
+                                                borderRadius: '1rem',
+                                                fontSize: '0.7rem',
+                                                fontWeight: '700',
+                                                color: '#166534',
+                                                border: '1px solid #bbf7d0'
+                                            }}>
+                                                <div style={{ width: '6px', height: '6px', background: '#10B981', borderRadius: '50%' }}></div>
+                                                NEWEST
+                                            </div>
+                                        )}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                             <div style={{ padding: '0.5rem', background: '#FFF7ED', borderRadius: '10px' }}><Activity size={20} color="#F97316" /></div>
                                             <div style={{ textAlign: 'right' }}>
@@ -423,34 +547,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                             <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Cross-reference external claims against official Parliamentary records using AI.</p>
                         </div>
 
-                        <div style={{ display: 'grid', gap: '1.5rem', maxWidth: '800px' }}>
-                            <div className="input-field">
-                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.5rem', color: '#334155' }}>External Link (YouTube, Article, etc.)</label>
-                                <input
-                                    type="text"
-                                    placeholder="https://www.youtube.com/watch?v=..."
-                                    value={factUrl}
-                                    onChange={(e) => setFactUrl(e.target.value)}
-                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none' }}
-                                />
-                            </div>
-
-                            <div className="input-field">
-                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.5rem', color: '#334155' }}>Specific Claim or Context (Optional)</label>
-                                <textarea
-                                    placeholder="e.g. The MP for Lang'ata claimed that the new bill would reduce taxes by 20%..."
-                                    value={factClaim}
-                                    onChange={(e) => setFactClaim(e.target.value)}
-                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', minHeight: '100px', resize: 'vertical' }}
-                                />
-                            </div>
-
-                            <Button
-                                label={factLoading ? "Verifying..." : "Verify Claim"}
-                                onPress={handleFactCheck}
-                                disabled={factLoading || (!factClaim.trim() && !factUrl.trim())}
-                            />
-                        </div>
+                        <MemoizedFactShieldInput onVerify={handleFactCheck} loading={factLoading} />
 
                         {factResult && (
                             <div style={{ marginTop: '2.5rem', padding: '2rem', background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
@@ -682,37 +779,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                             <div ref={chatEndRef} />
                                         </div>
 
-                                        <div style={{ padding: '1.5rem', borderTop: '1px solid #f0f0f0' }}>
-                                            <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', padding: '0.5rem', borderRadius: '1.5rem', border: '1px solid #e2e8f0' }}>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Ask about speakers, topics, or full questions..."
-                                                    value={chatInput}
-                                                    onChange={(e) => setChatInput(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
-                                                    style={{ flex: 1, background: 'transparent', border: 'none', padding: '0.5rem 1rem', outline: 'none', fontSize: '0.95rem' }}
-                                                />
-                                                <button
-                                                    onClick={handleSendChat}
-                                                    disabled={chatLoading || !chatInput.trim()}
-                                                    style={{
-                                                        background: 'var(--primary)',
-                                                        border: 'none',
-                                                        width: '40px',
-                                                        height: '40px',
-                                                        borderRadius: '50%',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        color: 'white',
-                                                        cursor: 'pointer',
-                                                        transition: 'opacity 0.2s'
-                                                    }}
-                                                >
-                                                    <Send size={18} />
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <MemoizedChatInput onSend={handleSendChat} disabled={chatLoading} />
                                     </div>
                                 </div>
                             </div>

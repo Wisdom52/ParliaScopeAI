@@ -13,9 +13,12 @@ from typing import Optional
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
 @router.get("/", response_model=List[BillOut])
-def get_bills(db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user_optional)):
+def get_bills(q: str = None, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user_optional)):
     """Fetch all bills. If authenticated, identify matching topics from user subscriptions."""
-    bills = db.query(Bill).order_by(Bill.created_at.desc()).all()
+    query = db.query(Bill)
+    if q:
+        query = query.filter(Bill.title.ilike(f"%{q}%"))
+    bills = query.order_by(Bill.date.desc(), Bill.created_at.desc()).all()
     
     user_topics = []
     if current_user:

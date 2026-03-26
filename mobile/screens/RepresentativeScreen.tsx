@@ -43,8 +43,6 @@ interface Representative {
     constituency_name?: string;
     county_name?: string;
     bio: string;
-    education: string;
-    experience: string;
     image_url: string;
     sittings_attended: number;
     votes_cast: number;
@@ -164,7 +162,15 @@ export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> 
             onPress={() => fetchRepDetail(item.id)}
             activeOpacity={0.7}
         >
-            <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+            {item.image_url ? (
+                <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+            ) : (
+                <View style={[styles.cardImage, styles.initialsCircle]}>
+                    <Text style={styles.initialsText}>
+                        {item.name.replace('Hon. ', '').split(/[,\s]+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()}
+                    </Text>
+                </View>
+            )}
             <View style={styles.cardContent}>
                 <Text style={styles.cardName}>{item.name}</Text>
                 <Text style={styles.cardSub}>{item.constituency_name || item.county_name || "National"}</Text>
@@ -245,7 +251,15 @@ export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> 
                             {activeTab === 'info' ? (
                                 <>
                                     <View style={styles.profileHeader}>
+                                    {selectedRep.image_url ? (
                                         <Image source={{ uri: selectedRep.image_url }} style={styles.profileImage} />
+                                    ) : (
+                                        <View style={[styles.profileImage, styles.initialsCircleLg]}>
+                                            <Text style={styles.initialsTextLg}>
+                                                {selectedRep.name.replace('Hon. ', '').split(/[,\s]+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()}
+                                            </Text>
+                                        </View>
+                                    )}
                                         <Text style={styles.profileName}>{selectedRep.name}</Text>
                                         <View style={styles.profileMeta}>
                                             <Text style={styles.profileSub}>{selectedRep.party} • {selectedRep.constituency_name || selectedRep.county_name || "National"}</Text>
@@ -272,19 +286,6 @@ export const RepresentativeScreen: React.FC<{ onSwitchToProfile?: () => void }> 
                                         <Text style={styles.sectionText}>{selectedRep.bio}</Text>
                                     </View>
 
-                                    <View style={styles.section}>
-                                        <Text style={styles.sectionTitle}>Education</Text>
-                                        <View style={styles.infoBox}>
-                                            <Text style={styles.infoText}>{selectedRep.education || "Information not available."}</Text>
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.section}>
-                                        <Text style={styles.sectionTitle}>Experience</Text>
-                                        <View style={styles.infoBox}>
-                                            <Text style={styles.infoText}>{selectedRep.experience || "Information not available."}</Text>
-                                        </View>
-                                    </View>
 
                                     <View style={styles.section}>
                                         <View style={styles.reviewHeaderRow}>
@@ -421,6 +422,13 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     cardImage: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#eee' },
+    initialsCircle: {
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: '#4f46e5',
+    },
+    initialsText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    initialsCircleLg: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#4f46e5' },
+    initialsTextLg: { color: '#fff', fontWeight: '800', fontSize: 30 },
     cardContent: { flex: 1, marginLeft: 15 },
     cardName: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
     cardSub: { fontSize: 13, color: '#666', marginTop: 2 },

@@ -189,6 +189,21 @@ backend/scripts/fix_*.py
 backend/scripts/repair_*.py
 *.log
 backend/*.html
+backend/*.py
+diagnostic_*.py
+inspect_db.py
+check_index.py
+list_docs_for_chat.py
+check_hansard_segments.py
+verify_formatting.py
+repair_*.py
+debug_*.py
+*repair_*.py
+*debug_*.py
+*fix_*.py
+*check_*.py
+*verify_*.py
+backend/scripts/purge_old_mps.py
 tmp/
 .gemini/
 

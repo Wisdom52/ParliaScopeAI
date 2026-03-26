@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Star, User, MapPin, Building, GraduationCap, Briefcase, X, Loader2 } from 'lucide-react';
+import { Search, Star, User, MapPin, Building, X, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 
@@ -36,8 +36,6 @@ interface Representative {
     constituency_name?: string;
     county_name?: string;
     bio: string;
-    education: string;
-    experience: string;
     image_url: string;
     sittings_attended: number;
     votes_cast: number;
@@ -146,7 +144,7 @@ export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> =
         <div className="representatives-container" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
             <div className="header-section" style={{ marginBottom: '2rem' }}>
                 <h1 style={{ fontSize: '2.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>Kenya Representatives</h1>
-                <p style={{ color: '#666' }}>Track performance, education, and legislative activity of your MPs.</p>
+                <p style={{ color: '#666' }}>Track performance and legislative activity of your MPs.</p>
 
                 <div style={{ position: 'relative', marginTop: '1.5rem', maxWidth: '500px' }}>
                     <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} size={18} />
@@ -191,11 +189,22 @@ export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> =
                             onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-                                <img
-                                    src={rep.image_url}
-                                    alt={rep.name}
-                                    style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #f0f0f0' }}
-                                />
+                                {rep.image_url ? (
+                                    <img
+                                        src={rep.image_url}
+                                        alt={rep.name}
+                                        style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #f0f0f0' }}
+                                    />
+                                ) : (
+                                    <div style={{
+                                        width: '60px', height: '60px', borderRadius: '50%',
+                                        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: '#fff', fontWeight: 700, fontSize: '1.1rem', flexShrink: 0
+                                    }}>
+                                        {rep.name.replace('Hon. ', '').split(/[,\s]+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()}
+                                    </div>
+                                )}
                                 <div style={{ marginLeft: '1rem' }}>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{rep.name}</h3>
                                     <div style={{ display: 'flex', alignItems: 'center', color: '#666', fontSize: '0.85rem' }}>
@@ -278,7 +287,18 @@ export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> =
                             {activeTab === 'info' ? (
                                 <>
                                     <div style={{ display: 'flex', gap: '2rem', marginBottom: '2.5rem' }}>
-                                        <img src={selectedRep.image_url} alt={selectedRep.name} style={{ width: '120px', height: '120px', borderRadius: '24px', objectFit: 'cover' }} />
+                                        {selectedRep.image_url ? (
+                                            <img src={selectedRep.image_url} alt={selectedRep.name} style={{ width: '120px', height: '120px', borderRadius: '24px', objectFit: 'cover', flexShrink: 0 }} />
+                                        ) : (
+                                            <div style={{
+                                                width: '120px', height: '120px', borderRadius: '24px', flexShrink: 0,
+                                                background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: '#fff', fontWeight: 800, fontSize: '2rem'
+                                            }}>
+                                                {selectedRep.name.replace('Hon. ', '').split(/[,\s]+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()}
+                                            </div>
+                                        )}
                                         <div>
                                             <h2 style={{ fontSize: '2rem', margin: '0 0 0.5rem 0' }}>{selectedRep.name}</h2>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
@@ -309,20 +329,6 @@ export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> =
                                         <p style={{ color: '#4b5563', lineHeight: 1.6 }}>{selectedRep.bio}</p>
                                     </div>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2.5rem' }}>
-                                        <div>
-                                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}><GraduationCap size={20} /> Education</h3>
-                                            <div style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', color: '#4b5563', padding: '1rem', background: '#f9fafb', borderRadius: '12px' }}>
-                                                {selectedRep.education || "Information not available"}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}><Briefcase size={20} /> Experience</h3>
-                                            <div style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', color: '#4b5563', padding: '1rem', background: '#f9fafb', borderRadius: '12px' }}>
-                                                {selectedRep.experience || "Information not available"}
-                                            </div>
-                                        </div>
-                                    </div>
 
                                     {/* Reviews Section */}
                                     <div style={{ paddingTop: '2rem', borderTop: '1px solid #eee' }}>

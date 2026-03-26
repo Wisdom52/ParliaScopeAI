@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 import traceback
 import time
@@ -37,6 +38,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def audit_log_middleware(request: Request, call_next):
@@ -80,6 +83,17 @@ async def startup_event():
     
     # Run without blocking the startup
     asyncio.create_task(run_crawl())
+    
+    # Trigger Bill crawl in the background
+    async def run_bill_crawl():
+        from app.routes.ingest import perform_bill_crawl
+        db = SessionLocal()
+        try:
+            await perform_bill_crawl(db, limit=5)
+        finally:
+            db.close()
+            
+    asyncio.create_task(run_bill_crawl())
 
 @app.get("/")
 async def root():

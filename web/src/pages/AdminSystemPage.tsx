@@ -64,9 +64,30 @@ export const AdminSystemPage: React.FC = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setMessage({ type: 'success', text: `Ingestion triggered: ${data.summary?.total_processed || 0} processed.` });
+        setMessage({ type: 'success', text: `Hansard Ingestion triggered: ${data.summary?.total_processed || 0} processed.` });
       } else {
-        setMessage({ type: 'error', text: 'Failed to trigger ingestion.' });
+        setMessage({ type: 'error', text: 'Failed to trigger Hansard ingestion.' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error connecting to server.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const triggerBillIngest = async () => {
+    setLoading(true);
+    setMessage(null);
+    try {
+      const response = await fetch('http://localhost:8000/ingest/crawl/bills?limit=10', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({ type: 'success', text: `Bill Ingestion triggered: ${data.ingested?.length || 0} new bills found.` });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to trigger Bill ingestion.' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error connecting to server.' });
@@ -137,6 +158,18 @@ export const AdminSystemPage: React.FC = () => {
                 >
                   <RefreshCw className={loading ? 'spin' : ''} size={16} /> 
                   Trigger Full Hansard Sync
+                </button>
+              </div>
+              <div className="system-card bg-white p-6 rounded-xl border border-gray-200">
+                <h3 className="text-lg font-bold mb-2">2026 Bill Ingestion</h3>
+                <p className="text-gray-600 mb-4 text-sm">Crawl parliament.go.ke for 2026 Bills and generate AI impact summaries (includes OCR).</p>
+                <button 
+                  className="trigger-btn flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50" 
+                  onClick={triggerBillIngest}
+                  disabled={loading}
+                >
+                  <RefreshCw className={loading ? 'spin' : ''} size={16} /> 
+                  Trigger 2026 Bill Sync
                 </button>
               </div>
               <div className="system-card bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300 opacity-60">

@@ -8,6 +8,9 @@ from typing import List
 router = APIRouter(prefix="/hansards", tags=["Hansards"])
 
 @router.get("/", response_model=List[schemas.Hansard])
-def list_documents(db: Session = Depends(get_db)):
+def list_documents(q: str = None, db: Session = Depends(get_db)):
     """Returns a list of all processed Hansard documents."""
-    return db.query(Hansard).order_by(Hansard.created_at.desc()).all()
+    query = db.query(Hansard)
+    if q:
+        query = query.filter(Hansard.title.ilike(f"%{q}%"))
+    return query.order_by(Hansard.date.desc(), Hansard.created_at.desc()).all()

@@ -44,6 +44,70 @@ interface FactShieldResult {
     sources: FactShieldSource[];
 }
 
+const MemoizedChatInput = React.memo(({ onSend, disabled }: { onSend: (msg: string) => void; disabled: boolean }) => {
+    const [input, setInput] = useState('');
+    const submit = () => {
+        if (input.trim() && !disabled) {
+            onSend(input);
+            setInput('');
+        }
+    };
+    return (
+        <View style={styles.chatInputRow}>
+            <TextInput
+                style={styles.chatInput}
+                placeholder="Type a question..."
+                value={input}
+                onChangeText={setInput}
+                onSubmitEditing={submit}
+            />
+            <TouchableOpacity style={styles.sendBtn} onPress={submit} disabled={disabled || !input.trim()}>
+                <MaterialCommunityIcons name="send" size={20} color="#fff" />
+            </TouchableOpacity>
+        </View>
+    );
+});
+
+const MemoizedFactShieldInput = React.memo(({ onVerify, loading }: { onVerify: (url: string, claim: string) => void; loading: boolean }) => {
+    const [url, setUrl] = useState('');
+    const [claim, setClaim] = useState('');
+    return (
+        <View style={styles.shieldInputCard}>
+            <Text style={styles.inputLabel}>Parliamentary Video or Article Link</Text>
+            <TextInput
+                style={styles.shieldInput}
+                placeholder="Paste YouTube link here..."
+                value={url}
+                onChangeText={setUrl}
+            />
+
+            <Text style={[styles.inputLabel, { marginTop: 15 }]}>What are we verifying?</Text>
+            <TextInput
+                style={[styles.shieldInput, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+                placeholder="Explain the claim you want to verify..."
+                multiline
+                value={claim}
+                onChangeText={setClaim}
+            />
+
+            <TouchableOpacity
+                style={[styles.shieldButton, (loading || (!claim && !url)) && { opacity: 0.6 }]}
+                onPress={() => onVerify(url, claim)}
+                disabled={loading || (!claim && !url)}
+            >
+                {loading ? (
+                    <ActivityIndicator color="#fff" />
+                ) : (
+                    <>
+                        <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" />
+                        <Text style={styles.shieldButtonText}>Verify Claim</Text>
+                    </>
+                )}
+            </TouchableOpacity>
+        </View>
+    );
+});
+
 export const SearchScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [documents, setDocuments] = useState<Hansard[]>([]);
@@ -60,12 +124,9 @@ export const SearchScreen = () => {
 
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-    const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
 
     // Fact Check State
-    const [factClaim, setFactClaim] = useState('');
-    const [factUrl, setFactUrl] = useState('');
     const [factResult, setFactResult] = useState<FactShieldResult | null>(null);
     const [factLoading, setFactLoading] = useState(false);
 
@@ -75,10 +136,10 @@ export const SearchScreen = () => {
 
     const scrollRef = useRef<ScrollView>(null);
 
-    const fetchDocs = async () => {
+    const fetchDocs = async (query = '') => {
         setDocsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/hansards/`);
+            const response = await fetch(`${API_BASE_URL}/hansards/?q=${encodeURIComponent(query)}`);
             if (response.ok) {
                 setDocuments(await response.json());
             }
@@ -112,10 +173,10 @@ export const SearchScreen = () => {
         }
     };
 
-    const fetchBills = async () => {
+    const fetchBills = async (query = '') => {
         setBillsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/bills/`);
+            const response = await fetch(`${API_BASE_URL}/bills/?q=${encodeURIComponent(query)}`);
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -145,13 +206,12 @@ export const SearchScreen = () => {
         }
     };
 
-    const handleSendChat = async () => {
-        if (!chatInput.trim()) return;
+    const handleSendChat = async (message: string) => {
+        if (!message.trim()) return;
 
-        const userMsg: ChatMessage = { role: 'user', content: chatInput };
+        const userMsg: ChatMessage = { role: 'user', content: message };
         setChatMessages(prev => [...prev, userMsg]);
         setChatLoading(true);
-        setChatInput('');
 
         try {
             const docId = selectedDoc?.id;
@@ -180,15 +240,15 @@ export const SearchScreen = () => {
         }
     };
 
-    const handleFactCheck = async () => {
-        if (!factClaim.trim() && !factUrl.trim()) return;
+    const handleFactCheck = async (url: string, claim: string) => {
+        if (!claim.trim() && !url.trim()) return;
         setFactLoading(true);
         setFactResult(null);
         try {
             const response = await fetch(`${API_BASE_URL}/fact-shield/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: factUrl, claim_text: factClaim }),
+                body: JSON.stringify({ url: url, claim_text: claim }),
             });
             if (response.ok) {
                 setFactResult(await response.json());
@@ -201,8 +261,6 @@ export const SearchScreen = () => {
     };
 
     useEffect(() => {
-        fetchDocs();
-        fetchBills();
         const loadInitialData = async () => {
             const storedToken = await AsyncStorage.getItem('parliaScope_token');
             setToken(storedToken);
@@ -210,13 +268,16 @@ export const SearchScreen = () => {
         loadInitialData();
     }, []);
 
-    const filteredDocs = documents.filter(doc =>
-        doc.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const filteredBills = bills.filter(bill =>
-        bill.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (activeCategory === 'parliament') {
+                fetchDocs(searchQuery);
+            } else if (activeCategory === 'bills') {
+                fetchBills(searchQuery);
+            }
+        }, 300);
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery, activeCategory]);
 
     return (
         <View style={styles.container}>
@@ -256,12 +317,18 @@ export const SearchScreen = () => {
 
             {activeCategory === 'parliament' ? (
                 <FlatList
-                    data={filteredDocs}
+                    data={documents}
                     keyExtractor={item => item.id.toString()}
                     refreshing={docsLoading}
                     onRefresh={fetchDocs}
-                    renderItem={({ item }) => (
-                        <TouchableOpacity style={styles.docCard} onPress={() => { setSelectedDoc(item); setChatMessages([]); setAudioData(null); }}>
+                    renderItem={({ item, index }) => (
+                        <TouchableOpacity style={[styles.docCard, index === 0 && styles.newestCard]} onPress={() => { setSelectedDoc(item); setChatMessages([]); setAudioData(null); }}>
+                             {index === 0 && (
+                                <View style={styles.newestBadge}>
+                                    <View style={styles.greenDot} />
+                                    <Text style={styles.newestText}>NEWEST</Text>
+                                </View>
+                            )}
                             <View style={styles.docIconContainer}>
                                 <MaterialCommunityIcons name="file-document-outline" size={24} color="#007AFF" />
                             </View>
@@ -277,13 +344,13 @@ export const SearchScreen = () => {
                 />
             ) : activeCategory === 'bills' ? (
                 <FlatList
-                    data={filteredBills}
+                    data={bills}
                     keyExtractor={item => item.id.toString()}
                     refreshing={billsLoading}
                     onRefresh={() => fetchBills()}
-                    renderItem={({ item }) => (
+                    renderItem={({ item, index }) => (
                         <TouchableOpacity 
-                            style={styles.docCard} 
+                            style={[styles.docCard, index === 0 && styles.newestCard]} 
                             onPress={() => { 
                                 setSelectedDoc({
                                     ...item,
@@ -294,6 +361,12 @@ export const SearchScreen = () => {
                                 setAudioData(null); 
                             }}
                         >
+                            {index === 0 && (
+                                <View style={styles.newestBadge}>
+                                    <View style={styles.greenDot} />
+                                    <Text style={styles.newestText}>NEWEST</Text>
+                                </View>
+                            )}
                             <View style={[styles.docIconContainer, { backgroundColor: '#F0FFF7' }]}>
                                 <MaterialCommunityIcons name="gavel" size={24} color="#10B981" />
                             </View>
@@ -322,39 +395,7 @@ export const SearchScreen = () => {
                         <Text style={styles.shieldSub}>AI Verification Engine</Text>
                     </View>
 
-                    <View style={styles.shieldInputCard}>
-                        <Text style={styles.inputLabel}>Parliamentary Video or Article Link</Text>
-                        <TextInput
-                            style={styles.shieldInput}
-                            placeholder="Paste YouTube link here..."
-                            value={factUrl}
-                            onChangeText={setFactUrl}
-                        />
-
-                        <Text style={[styles.inputLabel, { marginTop: 15 }]}>What are we verifying?</Text>
-                        <TextInput
-                            style={[styles.shieldInput, { height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
-                            placeholder="Explain the claim you want to verify..."
-                            multiline
-                            value={factClaim}
-                            onChangeText={setFactClaim}
-                        />
-
-                        <TouchableOpacity
-                            style={[styles.shieldButton, (factLoading || (!factClaim && !factUrl)) && { opacity: 0.6 }]}
-                            onPress={handleFactCheck}
-                            disabled={factLoading || (!factClaim && !factUrl)}
-                        >
-                            {factLoading ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <>
-                                    <MaterialCommunityIcons name="check-decagram" size={20} color="#fff" />
-                                    <Text style={styles.shieldButtonText}>Verify Claim</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-                    </View>
+                    <MemoizedFactShieldInput onVerify={handleFactCheck} loading={factLoading} />
 
                     {factResult && (
                         <View style={styles.resultCard}>
@@ -535,18 +576,7 @@ export const SearchScreen = () => {
                         </View>
                     </ScrollView>
 
-                    <View style={styles.chatInputRow}>
-                        <TextInput
-                            style={styles.chatInput}
-                            placeholder="Type a question..."
-                            value={chatInput}
-                            onChangeText={setChatInput}
-                            onSubmitEditing={handleSendChat}
-                        />
-                        <TouchableOpacity style={styles.sendBtn} onPress={handleSendChat} disabled={chatLoading || !chatInput.trim()}>
-                            <MaterialCommunityIcons name="send" size={20} color="#fff" />
-                        </TouchableOpacity>
-                    </View>
+                    <MemoizedChatInput onSend={handleSendChat} disabled={chatLoading} />
                 </KeyboardAvoidingView>
             </Modal>
         </View>
@@ -580,6 +610,10 @@ const styles = StyleSheet.create({
     docTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 2 },
     docDate: { fontSize: 12, color: '#888', marginBottom: 6 },
     docSnippet: { fontSize: 13, color: '#666', lineHeight: 18 },
+    newestCard: { borderColor: '#10B981', borderLeftWidth: 4, borderLeftColor: '#10B981' },
+    newestBadge: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: '#bbf7d0' },
+    greenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981', marginRight: 4 },
+    newestText: { fontSize: 10, fontWeight: '800', color: '#166534' },
     emptyText: { textAlign: 'center', color: '#999', marginTop: 50 },
     billCard: { padding: 20, borderRadius: 20, backgroundColor: '#fff', marginBottom: 20, borderWidth: 1, borderColor: '#f0f0f0' },
     billHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
