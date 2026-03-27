@@ -11,6 +11,7 @@ class RepresentativeReview(Base):
     speaker_id = Column(Integer, ForeignKey("speakers.id"), nullable=False)
     rating = Column(Integer, nullable=False) # 1-5
     comment = Column(String, nullable=True)
+    official_response = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")

@@ -18,3 +18,4 @@ edge-tts
 aiofiles
 pydantic[email]
 httpx
+psutil

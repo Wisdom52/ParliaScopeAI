@@ -235,16 +235,49 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                 body: JSON.stringify({ query: userMsg.content, document_id: docId, doc_type: docType }),
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                setChatMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: data.answer,
-                    sources: data.sources
-                }]);
-            } else {
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
                 setChatMessages(prev => [...prev, { role: 'assistant', content: `Something went wrong. ${data.detail || ''}` }]);
+                return;
+            }
+
+            if (!response.body) return;
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let botMsg: ChatMessage = { role: 'assistant', content: '', sources: [] };
+            
+            // Add placeholder message to state
+            setChatMessages(prev => [...prev, botMsg]);
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.trim()) {
+                        try {
+                            const parsed = JSON.parse(line);
+                            if (parsed.type === 'sources') {
+                                botMsg.sources = parsed.data;
+                            } else if (parsed.type === 'chunk') {
+                                botMsg.content += parsed.data;
+                            }
+                            
+                            // Update React state incrementally
+                            setChatMessages(prev => {
+                                const newMsgs = [...prev];
+                                newMsgs[newMsgs.length - 1] = { ...botMsg };
+                                return newMsgs;
+                            });
+                        } catch (e) {
+                            console.error("Error parsing NDJSON line:", e);
+                        }
+                    }
+                }
             }
         } catch (error) {
             setChatMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);
@@ -628,6 +661,29 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--primary)', fontWeight: '700', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                             <FileText size={18} /> Official Summary
                                         </div>
+
+                                        {/* Audio-First Engagement UI - Moved to Top */}
+                                        <div style={{ marginBottom: '1.5rem', background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                            <h3 style={{ fontSize: '0.9rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#334155' }}>
+                                                <Headphones size={16} color="var(--primary)" />
+                                                Audio-First Engagement
+                                            </h3>
+                                            {!audioData ? (
+                                                <div style={{ maxWidth: '200px' }}>
+                                                    <Button 
+                                                        label="Listen to audio" 
+                                                        variant="outline" 
+                                                        onPress={() => fetchAudio(selectedHansard.id, activeCategory === 'bills' ? 'bill' : 'hansard')} 
+                                                        loading={loadingAudio} 
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    <AudioPlayer src={audioData.en} title="🇬🇧 English Brief" />
+                                                    <AudioPlayer src={audioData.sw} title="🇰🇪 Swahili Brief (Kiswahili)" />
+                                                </div>
+                                            )}
+                                        </div>
                                         {/* Structured Summary Renderer */}
                                         {selectedHansard.ai_summary ? (() => {
                                             const lines = selectedHansard.ai_summary.split('\n');
@@ -705,28 +761,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                             </div>
                                         )}
                                         
-                                        {/* Audio-First Engagement UI */}
-                                        <div style={{ marginTop: '2rem', marginBottom: '1.5rem', background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                            <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#334155' }}>
-                                                <Headphones size={18} color="var(--primary)" />
-                                                Audio-First Engagement
-                                            </h3>
-                                            {!audioData ? (
-                                                <div style={{ maxWidth: '300px' }}>
-                                                    <Button 
-                                                        label="Generate & Listen to Audio Summary" 
-                                                        variant="outline" 
-                                                        onPress={() => fetchAudio(selectedHansard.id, activeCategory === 'bills' ? 'bill' : 'hansard')} 
-                                                        loading={loadingAudio} 
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                    <AudioPlayer src={audioData.en} title="🇬🇧 English Brief" />
-                                                    <AudioPlayer src={audioData.sw} title="🇰🇪 Swahili Brief (Kiswahili)" />
-                                                </div>
-                                            )}
-                                        </div>
+                                        {/* Removed from bottom */}
                                     </div>
 
                                     {/* Right Pane: Chat */}

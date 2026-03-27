@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from app.database import get_db
 from app.models.user import User
@@ -20,16 +22,19 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     try:
         logger.info(f"Signup attempt for email: {user.email}")
-        # Check if user exists (if email provided)
         if user.email:
             db_user = db.query(User).filter(User.email == user.email).first()
             if db_user:
-                raise HTTPException(status_code=400, detail="Email already registered")
+                raise HTTPException(status_code=400, detail="This email is already registered. Please login or use a different email.")
         
         hashed_password = get_password_hash(user.password) if user.password else None
         
         # Hash the National ID before storage (PII pseudonymisation)
         hashed_id = hash_id_number(str(user.id_number)) if user.id_number else None
+        if hashed_id:
+            existing_id = db.query(User).filter(User.id_number == hashed_id).first()
+            if existing_id:
+                raise HTTPException(status_code=400, detail="This ID/Passport is already registered to another account.")
 
         db_user = User(
             email=user.email,
@@ -168,15 +173,41 @@ def update_profile(
     
     update_data = user_update.dict(exclude_unset=True)
 
-    # Hash the National ID if it is being updated
+    # 1. Check email uniqueness explicitly
+    new_email = update_data.get('email')
+    if new_email and new_email.lower() != (user.email.lower() if user.email else ""):
+        existing = db.query(User).filter(User.email == new_email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="This email is already registered to another account. Please choose a unique one.")
+
+    # 2. Check id_number uniqueness explicitly
     if 'id_number' in update_data and update_data['id_number']:
-        update_data['id_number'] = hash_id_number(str(update_data['id_number']))
+        proposed_hashed_id = hash_id_number(str(update_data['id_number']))
+        if proposed_hashed_id != user.id_number: # Only check if it's changing
+            existing = db.query(User).filter(User.id_number == proposed_hashed_id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="This ID/Passport is already registered to another account.")
+        update_data['id_number'] = proposed_hashed_id
+
+    # 3. Check display name explicitly
+    new_display = update_data.get('display_name')
+    if new_display and new_display != user.display_name:
+        existing = db.query(User).filter(User.display_name == new_display).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="This display name is already taken. Please choose a unique one.")
 
     for key, value in update_data.items():
         setattr(user, key, value)
     
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A conflict occurred with your data. Please check and try again."
+        )
     
     # Reload location names for the response
     if user.county_id:

@@ -216,3 +216,14 @@ tmp/
 ehthumbs.db
 Thumbs.db
 desktop.ini
+
+# Application logs directory (generated at runtime)
+backend/logs/
+logs/
+
+# Temp / scratch files
+*.pdf
+debug_output.txt
+cleanup_db_scores.py
+check_nelson_stances.py
+ollama_models.txt

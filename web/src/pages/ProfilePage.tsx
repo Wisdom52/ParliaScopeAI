@@ -1,16 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, MapPin, CreditCard, MessageCircle, LogOut, Shield, Map, Trophy, Award, Star, TrendingUp, Edit2, X } from 'lucide-react';
+import { User, Mail, MapPin, CreditCard, MessageCircle, LogOut, Shield, Map, Award, Star, TrendingUp, Edit2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ImpactAlertTracking } from '../components/ImpactAlertTracking';
-
-interface Badge {
-    id: number;
-    name: string;
-    description: string;
-    icon_url?: string;
-}
 
 interface Constituency {
     id: number;
@@ -23,7 +16,7 @@ interface ProfilePageProps {
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
-    const { user, token, logout } = useAuth();
+    const { user, token, logout, refreshUser } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<any>({
         full_name: '',
@@ -39,7 +32,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
     const [constituencies, setConstituencies] = useState<Constituency[]>([]);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
-    const [gamification, setGamification] = useState({ points: 0, badges: [] as Badge[] });
     const [leaderStats, setLeaderStats] = useState<any>(null);
 
     useEffect(() => {
@@ -73,30 +65,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
         } catch (err) { console.error("Error fetching constituencies:", err); }
     };
 
-    const fetchGamification = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) return;
-            const res = await fetch('http://localhost:8000/baraza/user/gamification', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) return;
-            const data = await res.json();
-            setGamification({
-                points: data.prosperity_points ?? 0,
-                badges: Array.isArray(data.badges) ? data.badges : []
-            });
-        } catch (err) {
-            console.error("Error fetching gamification:", err);
-        }
-    };
-
     useEffect(() => {
         fetchCounties();
         if (user?.role === 'LEADER' && user.speaker_id) {
             fetchLeaderStats();
-        } else {
-            fetchGamification();
         }
     }, [user]);
 
@@ -135,9 +107,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
             if (response.ok) {
                 setMessage('Profile updated successfully!');
                 setIsEditing(false);
-                // The AuthContext will automatically refetch the profile via its useEffect
+                refreshUser(); // Update global auth context immediately
             } else {
-                setMessage('Failed to update profile.');
+                const errData = await response.json();
+                setMessage(errData.detail || 'Failed to update profile.');
             }
         } catch (error) {
             setMessage('Error updating profile.');
@@ -330,46 +303,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onLogout }) => {
                     </div>
                 )}
 
-                {/* Civic Passport (Citizens only) */}
-                {user.role !== 'LEADER' && !user.is_admin && (
-                    <div className="card" style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #333 100%)', border: 'none', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', color: 'white' }}>
-                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem', fontSize: '1.1rem', color: '#ffd43b' }}>
-                            <Trophy size={20} /> Civic Passport
-                        </h3>
-                        <div style={{ marginBottom: '2rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Prosperity Points</label>
-                                    <span style={{ fontSize: '2rem', fontWeight: 800 }}>{gamification.points}</span>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffd43b', background: 'rgba(255,212,59,0.1)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(255,212,59,0.2)' }}>
-                                        {gamification.points < 50 ? 'NOVICE' : gamification.points < 200 ? 'PATRIOT' : 'CHAMPION'}
-                                    </span>
-                                </div>
-                            </div>
-                            <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.min((gamification.points / 200) * 100, 100)}%`, background: 'linear-gradient(90deg, #ffd43b, #fab005)', borderRadius: '4px' }} />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>Earned Badges</label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                                {gamification.badges.length > 0 ? gamification.badges.map(badge => (
-                                    <div key={badge.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '14px', width: '80px', textAlign: 'center' }} title={badge.description}>
-                                        <span style={{ fontSize: '1.8rem' }}>{badge.icon_url || '🏅'}</span>
-                                        <span style={{ fontSize: '0.65rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{badge.name}</span>
-                                    </div>
-                                )) : (
-                                    <div style={{ padding: '20px', textAlign: 'center', width: '100%', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: '14px' }}>
-                                        <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>No badges yet. Start a quiz in Baraza!</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
 
             </div>
 

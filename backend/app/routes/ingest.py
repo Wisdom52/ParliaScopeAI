@@ -21,6 +21,9 @@ router = APIRouter(prefix="/ingest", tags=["Ingestion"])
 async def perform_bill_crawl(db: Session, limit: int = 5):
     """Internal logic to crawl and ingest Bills."""
     logger.info(f"Starting background Bill crawl (Limit: {limit})")
+    # Fetch latest 2026 voting proceedings as context
+    from app.services.scraper import get_latest_voting_proceedings_links, get_latest_bill_links
+    voting_links = await asyncio.to_thread(get_latest_voting_proceedings_links, limit=10)
     links = await asyncio.to_thread(get_latest_bill_links, limit=limit)
     ingested = []
     
@@ -36,7 +39,7 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
         bill = Bill(
             title=link['title'],
             document_url=link['url'],
-            date=link.get('date')  # Realistic date parsed from title/URL by scraper
+            date=link.get('date')
         )
         db.add(bill)
         db.commit()
@@ -55,10 +58,32 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
                         logger.info(f"Starting Impact Analysis for: {link['title']}")
                         raw_text = await extract_raw_text(tmp_path)
                         if raw_text:
-                            # Generate AI-powered structured bill summary
+                            # Attempt to find matching voting context
+                            voting_context = ""
+                            if bill.date:
+                                # Look for voting proceedings on the same date
+                                match = next((v for v in voting_links if v.get('date') == bill.date), None)
+                                if match:
+                                    logger.info(f"Found matching voting proceeding for date {bill.date}: {match['title']}")
+                                    try:
+                                        v_resp = await client.get(match['url'], timeout=60.0)
+                                        if v_resp.status_code == 200:
+                                            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as v_tmp:
+                                                v_tmp.write(v_resp.content)
+                                                v_tmp_path = v_tmp.name
+                                            v_text = await extract_raw_text(v_tmp_path)
+                                            if v_text:
+                                                # Take first 5k chars of voting text as context
+                                                voting_context = v_text[:5000]
+                                            os.remove(v_tmp_path)
+                                    except Exception as v_err:
+                                        logger.error(f"Failed to fetch voting context: {v_err}")
+
+                            # Generate AI-powered structured bill summary with topics and optional voting context
                             logger.info(f"Generating AI summary for Bill: {link['title']}")
-                            bill.summary = await generate_bill_summary(raw_text)
+                            bill.summary = await generate_bill_summary(raw_text, voting_context=voting_context)
                             db.commit() # Save summary early
+
                             
                             # Generate impacts safely
                             try:
@@ -84,7 +109,9 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
                         if os.path.exists(tmp_path):
                             os.remove(tmp_path)
                     
-                    await asyncio.sleep(2) # Short delay
+                    # Sequential processing stability: wait 5s before next bill
+                    logger.info(f"Waiting 5 seconds before next Bill...")
+                    await asyncio.sleep(5)
                 else:
                     logger.error(f"Download failed for {link['url']}: Status {resp.status_code}")
         except Exception as e:

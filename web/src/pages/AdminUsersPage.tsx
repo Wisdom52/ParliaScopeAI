@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, Trash2, ShieldCheck, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { RefreshCw, Trash2, ShieldCheck, AlertCircle, Search, CheckSquare, Square, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './AdminPage.css';
 
@@ -34,7 +34,13 @@ interface VerifiedLeader {
   is_active: boolean;
 }
 
-export const AdminUsersPage: React.FC = () => {
+const PAGE_SIZE = 15;
+
+interface Props {
+  initialFilter?: 'active' | 'paused' | null;
+}
+
+export const AdminUsersPage: React.FC<Props> = ({ initialFilter }) => {
   const { token, user: currentAdmin } = useAuth();
   const [users, setUsers] = useState<UserData[]>([]);
   const [pendingLeaders, setPendingLeaders] = useState<LeaderClaim[]>([]);
@@ -44,6 +50,14 @@ export const AdminUsersPage: React.FC = () => {
   const [selectedClaim, setSelectedClaim] = useState<LeaderClaim | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'citizens' | 'leaders'>('citizens');
+
+  // ── Scalability: Search + Filter + Pagination ──
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused'>(initialFilter ?? 'all');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // ── Bulk Actions ──
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -74,7 +88,6 @@ export const AdminUsersPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (aRes.ok) setActiveLeaders(await aRes.json());
-
     } catch (error) {
       console.error('Failed to fetch leaders:', error);
     } finally {
@@ -112,7 +125,6 @@ export const AdminUsersPage: React.FC = () => {
 
   const handleDeleteUser = async (userId: number, email: string) => {
     if (!window.confirm(`Are you sure you want to PERMANENTLY delete user ${email}? This action cannot be undone.`)) return;
-    
     try {
       const response = await fetch(`http://localhost:8000/admin/users/${userId}`, {
         method: 'DELETE',
@@ -120,11 +132,42 @@ export const AdminUsersPage: React.FC = () => {
       });
       if (response.ok) {
         setUsers(prev => prev.filter(u => u.id !== userId));
+        setSelectedIds(prev => { const s = new Set(prev); s.delete(userId); return s; });
         setMessage({ type: 'success', text: `User ${email} has been deleted.` });
       }
     } catch (error) {
       console.error('Failed to delete user:', error);
     }
+  };
+
+  // ── Bulk Action Handlers ──
+  const handleBulkPause = async () => {
+    if (!selectedIds.size) return;
+    if (!window.confirm(`Pause ${selectedIds.size} selected account(s)?`)) return;
+    const targets = [...selectedIds];
+    for (const id of targets) {
+      const u = users.find(u => u.id === id);
+      if (u && u.is_active) await handleStatusToggle(id);
+    }
+    setSelectedIds(new Set());
+    setMessage({ type: 'success', text: `${targets.length} account(s) paused.` });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedIds.size) return;
+    if (!window.confirm(`PERMANENTLY delete ${selectedIds.size} selected account(s)? This cannot be undone.`)) return;
+    const targets = [...selectedIds];
+    for (const id of targets) {
+      const u = users.find(u => u.id === id);
+      if (u && u.id !== currentAdmin?.id) {
+        await fetch(`http://localhost:8000/admin/users/${id}`, {
+          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+    }
+    setUsers(prev => prev.filter(u => !selectedIds.has(u.id)));
+    setSelectedIds(new Set());
+    setMessage({ type: 'success', text: `${targets.length} account(s) deleted.` });
   };
 
   const handleAuthorizeLeader = async (claimId: number) => {
@@ -148,18 +191,47 @@ export const AdminUsersPage: React.FC = () => {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (resp.ok) {
-        fetchLeaders();
-      }
+      if (resp.ok) { fetchLeaders(); }
     } catch (error) {
-       console.error('Failed to toggle leader status:', error);
+      console.error('Failed to toggle leader status:', error);
     }
   };
 
   useEffect(() => {
     if (activeTab === 'citizens') fetchUsers();
     if (activeTab === 'leaders') fetchLeaders();
+    setSelectedIds(new Set());
+    setCurrentPage(1);
   }, [activeTab]);
+
+  // ── Derived: filtered + paginated citizens ──
+  const citizenList = useMemo(() => users.filter(u => u.role !== 'LEADER'), [users]);
+
+  const filteredUsers = useMemo(() => {
+    let list = citizenList;
+    if (statusFilter === 'active') list = list.filter(u => u.is_active);
+    if (statusFilter === 'paused') list = list.filter(u => !u.is_active);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(u =>
+        u.email?.toLowerCase().includes(q) || u.full_name?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [citizenList, statusFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageUsers = filteredUsers.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const allPageSelected = pageUsers.length > 0 && pageUsers.every(u => selectedIds.has(u.id));
+  const togglePageSelect = () => {
+    if (allPageSelected) {
+      setSelectedIds(prev => { const s = new Set(prev); pageUsers.forEach(u => s.delete(u.id)); return s; });
+    } else {
+      setSelectedIds(prev => { const s = new Set(prev); pageUsers.forEach(u => s.add(u.id)); return s; });
+    }
+  };
 
   return (
     <div className="admin-container p-8">
@@ -167,15 +239,11 @@ export const AdminUsersPage: React.FC = () => {
           <button 
             className={`px-4 py-2 rounded-lg font-semibold border transition-colors ${activeTab === 'citizens' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
             onClick={() => setActiveTab('citizens')}
-          >
-            Manage Citizens
-          </button>
+          >Manage Citizens</button>
           <button 
             className={`px-4 py-2 rounded-lg font-semibold border transition-colors ${activeTab === 'leaders' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
             onClick={() => setActiveTab('leaders')}
-          >
-            Manage Leaders
-          </button>
+          >Manage Leaders</button>
       </div>
 
       <div className="admin-content">
@@ -188,14 +256,67 @@ export const AdminUsersPage: React.FC = () => {
 
         {activeTab === 'citizens' && (
           <div className="admin-section">
-            <div className="section-header">
-              <h2>Registered Users ({users.length})</h2>
-              <button className="refresh-btn" onClick={fetchUsers}><RefreshCw size={14} /></button>
+            {/* ── Toolbar: Search + Filter + Bulk Actions ── */}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                <input
+                  type="text"
+                  placeholder="Search by name or email…"
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px 8px 34px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '0.875rem' }}
+                />
+              </div>
+              
+              {/* Status filter pills */}
+              <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', padding: '4px', borderRadius: '8px' }}>
+                {(['all', 'active', 'paused'] as const).map(f => (
+                  <button key={f} onClick={() => { setStatusFilter(f); setCurrentPage(1); }}
+                    style={{ padding: '4px 14px', borderRadius: '6px', border: 'none', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                      background: statusFilter === f ? 'white' : 'transparent',
+                      color: statusFilter === f ? (f === 'paused' ? '#dc2626' : f === 'active' ? '#059669' : '#374151') : '#6b7280',
+                      boxShadow: statusFilter === f ? '0 1px 4px rgba(0,0,0,0.1)' : 'none'
+                    }}>
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="section-header" style={{ flex: 'none', margin: 0 }}>
+                <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>{filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}</span>
+                <button className="refresh-btn" onClick={fetchUsers}><RefreshCw size={14} /></button>
+              </div>
             </div>
+
+            {/* ── Bulk Action Bar (visible when rows selected) ── */}
+            {selectedIds.size > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '10px 16px', marginBottom: '1rem' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1d4ed8' }}>{selectedIds.size} selected</span>
+                <button onClick={handleBulkPause}
+                  style={{ padding: '5px 14px', borderRadius: '6px', border: 'none', background: '#f59e0b', color: 'white', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  Pause Selected
+                </button>
+                <button onClick={handleBulkDelete}
+                  style={{ padding: '5px 14px', borderRadius: '6px', border: 'none', background: '#dc2626', color: 'white', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  Delete Selected
+                </button>
+                <button onClick={() => setSelectedIds(new Set())}
+                  style={{ padding: '5px 14px', borderRadius: '6px', border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', marginLeft: 'auto' }}>
+                  Clear
+                </button>
+              </div>
+            )}
+
             <div className="admin-table-wrapper">
               <table className="admin-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '40px' }}>
+                      <button onClick={togglePageSelect} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                        {allPageSelected ? <CheckSquare size={16} color="#2563eb" /> : <Square size={16} color="#9ca3af" />}
+                      </button>
+                    </th>
                     <th>ID</th>
                     <th>Full Name</th>
                     <th>Email</th>
@@ -205,8 +326,16 @@ export const AdminUsersPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.filter(u => u.role !== 'LEADER').map(u => (
-                    <tr key={u.id}>
+                  {pageUsers.length === 0 ? (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No users match your filter.</td></tr>
+                  ) : pageUsers.map(u => (
+                    <tr key={u.id} style={{ background: selectedIds.has(u.id) ? '#eff6ff' : undefined }}>
+                      <td>
+                        <button onClick={() => setSelectedIds(prev => { const s = new Set(prev); s.has(u.id) ? s.delete(u.id) : s.add(u.id); return s; })}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                          {selectedIds.has(u.id) ? <CheckSquare size={16} color="#2563eb" /> : <Square size={16} color="#9ca3af" />}
+                        </button>
+                      </td>
                       <td>{u.id}</td>
                       <td>{u.full_name || 'Guest'}</td>
                       <td>{u.email || '-'}</td>
@@ -222,28 +351,17 @@ export const AdminUsersPage: React.FC = () => {
                       </td>
                       <td>
                         <div className="admin-actions">
-                          <button 
-                            className="action-btn role" 
-                            title={u.is_admin ? "Demote to Citizen" : "Promote to Admin"}
-                            onClick={() => handleRoleToggle(u.id)}
-                            disabled={u.id === currentAdmin?.id}
-                          >
+                          <button className="action-btn role" title={u.is_admin ? "Demote to Citizen" : "Promote to Admin"}
+                            onClick={() => handleRoleToggle(u.id)} disabled={u.id === currentAdmin?.id}>
                             <ShieldCheck size={16} />
                           </button>
-                          <button 
-                            className={`action-btn status ${u.is_active ? 'pause' : 'resume'}`}
+                          <button className={`action-btn status ${u.is_active ? 'pause' : 'resume'}`}
                             title={u.is_active ? "Pause Account" : "Activate Account"}
-                            onClick={() => handleStatusToggle(u.id)}
-                            disabled={u.id === currentAdmin?.id}
-                          >
+                            onClick={() => handleStatusToggle(u.id)} disabled={u.id === currentAdmin?.id}>
                             <AlertCircle size={16} />
                           </button>
-                          <button 
-                            className="action-btn delete" 
-                            title="Delete User"
-                            onClick={() => handleDeleteUser(u.id, u.email || '')}
-                            disabled={u.id === currentAdmin?.id}
-                          >
+                          <button className="action-btn delete" title="Delete User"
+                            onClick={() => handleDeleteUser(u.id, u.email || '')} disabled={u.id === currentAdmin?.id}>
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -253,6 +371,40 @@ export const AdminUsersPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* ── Pagination ── */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', padding: '0 4px' }}>
+                <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                  Page {safePage} of {totalPages} ({filteredUsers.length} total)
+                </span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: safePage === 1 ? 0.4 : 1 }}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                    let p = i + 1;
+                    if (totalPages > 7) {
+                      const start = Math.max(1, safePage - 3);
+                      p = start + i;
+                      if (p > totalPages) return null;
+                    }
+                    return (
+                      <button key={p} onClick={() => setCurrentPage(p)}
+                        style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', fontWeight: p === safePage ? 700 : 400,
+                          background: p === safePage ? '#2563eb' : 'white', color: p === safePage ? 'white' : '#374151', cursor: 'pointer' }}>
+                        {p}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+                    style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: safePage === totalPages ? 0.4 : 1 }}>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -285,15 +437,10 @@ export const AdminUsersPage: React.FC = () => {
                             {p.staff_card_url && <span className="doc-link text-blue-600 underline text-sm cursor-pointer ml-2">Photo 2</span>}
                           </div>
                         </td>
-                         <td>
-                          <button 
-                            className="authorize-btn bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-blue-700" 
-                            onClick={() => {
-                                setSelectedClaim(p);
-                                setIsReviewModalOpen(true);
-                            }}
-                          >
-                            Review & Authorize
+                        <td>
+                          <button className="authorize-btn bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-blue-700"
+                            onClick={() => { setSelectedClaim(p); setIsReviewModalOpen(true); }}>
+                            Review &amp; Authorize
                           </button>
                         </td>
                       </tr>
@@ -327,10 +474,8 @@ export const AdminUsersPage: React.FC = () => {
                         </span>
                       </td>
                       <td>
-                        <button 
-                          className={`action-btn status ${l.is_active ? 'pause' : 'resume'}`}
-                          onClick={() => handleToggleLeaderStatus(l.id)}
-                        >
+                        <button className={`action-btn status ${l.is_active ? 'pause' : 'resume'}`}
+                          onClick={() => handleToggleLeaderStatus(l.id)}>
                           <AlertCircle size={16} />
                         </button>
                       </td>
@@ -379,16 +524,10 @@ export const AdminUsersPage: React.FC = () => {
 
               <div className="modal-actions mt-8 flex justify-end gap-3 border-t pt-4">
                 <button className="modal-btn cancel px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50 font-semibold" onClick={() => setIsReviewModalOpen(false)}>Close Review</button>
-                <button 
-                    className="modal-btn approve px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold" 
-                    onClick={() => {
-                        handleAuthorizeLeader(selectedClaim.id);
-                        setIsReviewModalOpen(false);
-                    }}
-                >
+                <button className="modal-btn approve px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold"
+                    onClick={() => { handleAuthorizeLeader(selectedClaim.id); setIsReviewModalOpen(false); }}>
                     Authorize Official Profile
                 </button>
-                
               </div>
             </div>
           </div>

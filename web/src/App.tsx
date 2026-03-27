@@ -12,9 +12,10 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSystemPage } from './pages/AdminSystemPage';
 import { AdminDatabasePage } from './pages/AdminDatabasePage';
 import { LeaderDashboard } from './pages/LeaderDashboard';
+import { LeaderArchivePage } from './pages/LeaderArchivePage';
 import './App.css';
 
-type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza' | 'admin_overview' | 'admin_users' | 'admin_system' | 'admin_database' | 'leader_portal';
+type TabId = 'docs' | 'daily' | 'representative' | 'profile' | 'baraza' | 'admin_overview' | 'admin_users' | 'admin_system' | 'admin_database' | 'leader_portal' | 'leader_archive';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'docs', label: 'Docs', icon: <FileText size={18} /> },
@@ -30,7 +31,25 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boole
 
 function AppContent() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('docs');
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const saved = localStorage.getItem('parliascope_active_tab');
+    if (saved && ['docs', 'daily', 'representative', 'profile', 'baraza', 'admin_overview', 'admin_users', 'admin_system', 'admin_database', 'leader_portal', 'leader_archive'].includes(saved)) {
+      return saved as TabId;
+    }
+    return 'docs';
+  });
+  const [returnTab, setReturnTab] = useState<TabId | null>(null);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [adminUserFilter, setAdminUserFilter] = useState<'active' | 'paused' | null>(null);
+
+  const navigateToUsers = (filter: 'active' | 'paused' | null) => {
+    setAdminUserFilter(filter);
+    setActiveTab('admin_users');
+  };
+
+  useEffect(() => {
+    localStorage.setItem('parliascope_active_tab', activeTab);
+  }, [activeTab]);
 
   // Ensure leaders are not on restricted tabs
   useEffect(() => {
@@ -50,10 +69,16 @@ function AppContent() {
   const handleTabClick = (tabId: TabId) => {
     if (tabId === 'profile' && !user) {
       // Mandatory sign-in check
+      setReturnTab(activeTab);
       setActiveTab('profile');
       return;
     }
     setActiveTab(tabId);
+  };
+
+  const handleSwitchToProfile = () => {
+    setReturnTab(activeTab);
+    setActiveTab('profile');
   };
 
   return (
@@ -87,16 +112,36 @@ function AppContent() {
 
       {/* Tab Content */}
       <main className="tab-content">
-        {activeTab === 'docs' && <SearchPage onSwitchToProfile={() => setActiveTab('profile')} />}
-        {activeTab === 'baraza' && <BarazaPage onSwitchToProfile={() => setActiveTab('profile')} />}
-        {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={() => setActiveTab('profile')} />}
-        {activeTab === 'leader_portal' && user?.role === 'LEADER' && <LeaderDashboard />}
-        {activeTab === 'admin_overview' && user?.is_admin && <AdminOverviewPage />}
-        {activeTab === 'admin_users' && user?.is_admin && <AdminUsersPage />}
+        {activeTab === 'docs' && <SearchPage onSwitchToProfile={handleSwitchToProfile} />}
+        {activeTab === 'baraza' && <BarazaPage onSwitchToProfile={handleSwitchToProfile} />}
+        {activeTab === 'representative' && <RepresentativesPage onSwitchToProfile={handleSwitchToProfile} />}
+        {activeTab === 'leader_portal' && user?.role === 'LEADER' && (
+          <LeaderDashboard 
+             onViewArchive={(title) => {
+               setSelectedSession(title);
+               setActiveTab('leader_archive');
+             }} 
+          />
+        )}
+        {activeTab === 'leader_archive' && selectedSession && (
+          <LeaderArchivePage 
+            sessionTitle={selectedSession} 
+            onBack={() => setActiveTab('leader_portal')} 
+          />
+        )}
+        {activeTab === 'admin_overview' && user?.is_admin && <AdminOverviewPage onNavigateToUsers={navigateToUsers} />}
+        {activeTab === 'admin_users' && user?.is_admin && <AdminUsersPage initialFilter={adminUserFilter} />}
         {activeTab === 'admin_system' && user?.is_admin && <AdminSystemPage />}
         {activeTab === 'admin_database' && user?.is_admin && <AdminDatabasePage />}
         {activeTab === 'profile' && (
-          user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => setActiveTab('profile')} />
+          user ? <ProfilePage onLogout={handleLogout} /> : <Onboarding onComplete={() => {
+            if (returnTab) {
+              setActiveTab(returnTab);
+              setReturnTab(null);
+            } else {
+              setActiveTab('profile');
+            }
+          }} />
         )}
       </main>
     </div>

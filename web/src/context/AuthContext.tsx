@@ -25,6 +25,7 @@ interface AuthContextType {
     token: string | null;
     login: (token: string) => void;
     logout: () => void;
+    refreshUser: () => void;
     loading: boolean;
 }
 
@@ -64,6 +65,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [token]);
 
+    const refreshUser = () => {
+        if (token) {
+            fetchProfile(token);
+        }
+    };
+
     const login = (newToken: string) => {
         localStorage.setItem('parliaScope_token', newToken);
         setToken(newToken);
@@ -76,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, refreshUser, loading }}>
             {children}
         </AuthContext.Provider>
     );

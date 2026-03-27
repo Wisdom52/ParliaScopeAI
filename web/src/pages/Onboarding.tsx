@@ -380,17 +380,33 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                                     onChangeText={(text) => {
                                         setCountySearch(text);
                                         setShowCountyResults(true);
-                                        if (text === '') setFormData({ ...formData, county_id: 0, constituency_id: 0 });
+                                        // Auto-match county (case-insensitive)
+                                        const match = counties.find(c => c.name.toLowerCase() === text.trim().toLowerCase());
+                                        if (match) {
+                                            if (formData.county_id !== match.id) {
+                                                setFormData((prev: any) => ({ ...prev, county_id: match.id, constituency_id: 0 }));
+                                                setConstituencySearch('');
+                                            }
+                                            setShowCountyResults(false);
+                                        } else if (text === '') {
+                                            setFormData((prev: any) => ({ ...prev, county_id: 0, constituency_id: 0 }));
+                                        }
                                     }}
                                     onKeyDown={(e: any) => handleKeyDown(e, 'county')}
                                     onFocus={() => setShowCountyResults(true)}
                                     onBlur={() => setTimeout(() => setShowCountyResults(false), 250)}
                                     placeholder="Search County..."
+                                    error={countySearch && !formData.county_id && !showCountyResults ? "Please select a valid County" : ""}
                                 />
                                 {showCountyResults && countySearch && filteredCounties.length > 0 && (
                                     <div className="dropdown" style={{ position: 'absolute', width: '100%', zIndex: 20, background: 'white', border: '1px solid var(--border)', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                                         {filteredCounties.map(c => (
-                                            <div key={c.id} onClick={() => { setFormData({ ...formData, county_id: c.id, constituency_id: 0 }); setCountySearch(c.name); setConstituencySearch(''); setShowCountyResults(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: formData.county_id === c.id ? 'var(--bg-surface)' : 'transparent' }}>{c.name}</div>
+                                            <div key={c.id} onClick={() => { 
+                                                setFormData((prev: any) => ({ ...prev, county_id: c.id, constituency_id: 0 })); 
+                                                setCountySearch(c.name); 
+                                                setConstituencySearch(''); 
+                                                setShowCountyResults(false); 
+                                            }} style={{ padding: '8px 12px', cursor: 'pointer', background: formData.county_id === c.id ? 'var(--bg-surface)' : 'transparent' }}>{c.name}</div>
                                         ))}
                                     </div>
                                 )}
@@ -403,17 +419,28 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                                     onChangeText={(text) => {
                                         setConstituencySearch(text);
                                         setShowConstituencyResults(true);
+                                        // Auto-match constituency
+                                        const match = constituencies.find(c => c.name.toLowerCase() === text.trim().toLowerCase());
+                                        if (match) {
+                                            setFormData((prev: any) => ({ ...prev, constituency_id: match.id }));
+                                            setShowConstituencyResults(false);
+                                        }
                                     }}
                                     onKeyDown={(e: any) => handleKeyDown(e, 'constituency')}
                                     onFocus={() => setShowConstituencyResults(true)}
                                     onBlur={() => setTimeout(() => setShowConstituencyResults(false), 250)}
-                                    placeholder="Search Constituency..."
+                                    placeholder={!formData.county_id ? "Select County First..." : "Search Constituency..."}
                                     disabled={!formData.county_id}
+                                    error={!formData.county_id && countySearch ? "Select a valid County above" : (constituencySearch && !formData.constituency_id && !showConstituencyResults ? "Please select a valid Constituency" : "")}
                                 />
                                 {showConstituencyResults && constituencySearch && formData.county_id > 0 && filteredConstituencies.length > 0 && (
                                     <div className="dropdown" style={{ position: 'absolute', width: '100%', zIndex: 20, background: 'white', border: '1px solid var(--border)', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                                         {filteredConstituencies.map(c => (
-                                            <div key={c.id} onClick={() => { setFormData({ ...formData, constituency_id: c.id }); setConstituencySearch(c.name); setShowConstituencyResults(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: formData.constituency_id === c.id ? 'var(--bg-surface)' : 'transparent' }}>{c.name}</div>
+                                            <div key={c.id} onClick={() => { 
+                                                setFormData((prev: any) => ({ ...prev, constituency_id: c.id })); 
+                                                setConstituencySearch(c.name); 
+                                                setShowConstituencyResults(false); 
+                                            }} style={{ padding: '8px 12px', cursor: 'pointer', background: formData.constituency_id === c.id ? 'var(--bg-surface)' : 'transparent' }}>{c.name}</div>
                                         ))}
                                     </div>
                                 )}
@@ -537,15 +564,25 @@ export const Onboarding: React.FC<Props> = ({ onComplete }) => {
                             
                             <div 
                                 onClick={() => maishaInputRef.current?.click()}
-                                style={{ flex: 1, height: '70px', background: maishaFile ? '#e3f2fd' : '#eee', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', textAlign: 'center', cursor: 'pointer', padding: '4px' }}
+                                style={{ flex: 1, height: '120px', background: maishaFile ? 'transparent' : '#eee', borderRadius: '8px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', textAlign: 'center', cursor: 'pointer', overflow: 'hidden', position: 'relative' }}
                             >
-                                {maishaFile ? `Selected: ${maishaFile.name}` : "Upload Maisha Card Photo"}
+                                {maishaFile ? (
+                                    <>
+                                        <img src={URL.createObjectURL(maishaFile)} alt="Maisha Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px', fontSize: '0.7rem' }}>Change Maisha Card</div>
+                                    </>
+                                ) : "Upload Maisha Card Photo"}
                             </div>
                             <div 
                                 onClick={() => staffInputRef.current?.click()}
-                                style={{ flex: 1, height: '70px', background: staffFile ? '#e3f2fd' : '#eee', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', textAlign: 'center', cursor: 'pointer', padding: '4px' }}
+                                style={{ flex: 1, height: '120px', background: staffFile ? 'transparent' : '#eee', borderRadius: '8px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', textAlign: 'center', cursor: 'pointer', overflow: 'hidden', position: 'relative' }}
                             >
-                                {staffFile ? `Selected: ${staffFile.name}` : "Upload Staff ID Photo"}
+                                {staffFile ? (
+                                    <>
+                                        <img src={URL.createObjectURL(staffFile)} alt="Staff ID Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px', fontSize: '0.7rem' }}>Change Staff ID</div>
+                                    </>
+                                ) : "Upload Staff ID Photo"}
                             </div>
                         </div>
                     </div>

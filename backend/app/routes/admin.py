@@ -3,19 +3,76 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, inspect, text
 from typing import List
 import os
+import psutil
+import datetime
 
-from app.database import get_db
+from app.database import get_db, engine
 from app.models.user import User
 from app.models.system import AdminNotification
+from app.models.admin_audit import AdminAuditLog
 from app.models.bill import Bill
 from app.models.hansard import Hansard
 from app.models.baraza import BarazaMeeting, BarazaPoll, BarazaForumPost, BarazaLiveChat, BarazaLivePulse
-from app.schemas import User as UserRead
+from app.schemas import User as UserRead, AdminAuditLogOut
 from app.routes.auth import get_current_admin_user
 from app.core.logger import logger
 from app.routes.ingest import perform_hansard_crawl
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+@router.get("/health")
+def get_system_health(
+    admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns real-time server health metrics: CPU, RAM, disk, and DB connectivity.
+    """
+    cpu_percent = psutil.cpu_percent(interval=0.5)
+    ram = psutil.virtual_memory()
+    disk = psutil.disk_usage("/" if os.name != "nt" else "C:\\")
+
+    # DB connectivity check
+    db_ok = True
+    db_latency_ms = 0
+    try:
+        t0 = datetime.datetime.utcnow()
+        db.execute(text("SELECT 1"))
+        db_latency_ms = round((datetime.datetime.utcnow() - t0).total_seconds() * 1000, 2)
+    except Exception:
+        db_ok = False
+
+    # Connection pool stats (SQLAlchemy)
+    pool = engine.pool
+    pool_stats = {
+        "checkedin": pool.checkedin(),
+        "checkedout": pool.checkedout(),
+        "size": pool.size(),
+        "overflow": pool.overflow(),
+    }
+
+    return {
+        "cpu": {
+            "percent": cpu_percent,
+            "core_count": psutil.cpu_count(logical=True)
+        },
+        "ram": {
+            "total_gb": round(ram.total / 1e9, 2),
+            "used_gb": round(ram.used / 1e9, 2),
+            "percent": ram.percent
+        },
+        "disk": {
+            "total_gb": round(disk.total / 1e9, 2),
+            "used_gb": round(disk.used / 1e9, 2),
+            "percent": disk.percent
+        },
+        "database": {
+            "ok": db_ok,
+            "latency_ms": db_latency_ms,
+            "pool": pool_stats
+        },
+        "uptime_seconds": round((datetime.datetime.utcnow() - datetime.datetime.utcfromtimestamp(psutil.boot_time())).total_seconds())
+    }
 
 @router.get("/users", response_model=List[UserRead])
 def list_users(
@@ -140,6 +197,14 @@ def update_user_role(
         
     user.is_admin = not user.is_admin
     db.commit()
+    # Audit trail
+    db.add(AdminAuditLog(
+        admin_id=admin.id,
+        action="ROLE_CHANGED",
+        target_user_id=user.id,
+        details=f"{'Promoted to Admin' if user.is_admin else 'Demoted to Citizen'}: {user.email}"
+    ))
+    db.commit()
     logger.info(f"Admin {admin.email} toggled role for user {user.email} to is_admin={user.is_admin}")
     return {"status": "success", "is_admin": user.is_admin}
 
@@ -160,6 +225,14 @@ def toggle_user_status(
         raise HTTPException(status_code=404, detail="User not found.")
         
     user.is_active = not user.is_active
+    db.commit()
+    # Audit trail
+    db.add(AdminAuditLog(
+        admin_id=admin.id,
+        action="STATUS_CHANGED",
+        target_user_id=user.id,
+        details=f"{'Activated' if user.is_active else 'Paused'}: {user.email}"
+    ))
     db.commit()
     logger.info(f"Admin {admin.email} toggled status for user {user.email} to is_active={user.is_active}")
     return {"status": "success", "is_active": user.is_active}
@@ -182,6 +255,13 @@ def delete_user(
         
     email = user.email
     db.delete(user)
+    # Audit trail (before final commit so we still have admin context)
+    db.add(AdminAuditLog(
+        admin_id=admin.id,
+        action="USER_DELETED",
+        target_user_id=user_id,
+        details=f"Permanently deleted account: {email}"
+    ))
     db.commit()
     logger.warning(f"Admin {admin.email} PERMANENTLY DELETED user account: {email}")
     return {"status": "success", "message": f"User {email} deleted successfully."}
@@ -193,6 +273,14 @@ def get_notifications(
 ):
     """Fetch recent system notifications for administrators."""
     return db.query(AdminNotification).order_by(AdminNotification.created_at.desc()).limit(100).all()
+
+@router.get("/audit-logs", response_model=List[AdminAuditLogOut])
+def get_audit_logs(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Returns the admin action ledger in reverse-chronological order."""
+    return db.query(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()).limit(200).all()
 
 @router.patch("/notifications/{notif_id}/read")
 def mark_notification_read(

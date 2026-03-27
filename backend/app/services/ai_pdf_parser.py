@@ -80,49 +80,43 @@ Output ONLY the structured report above. Do not add any preamble, conclusion, or
 """
 
 BILL_SUMMARY_PROMPT = """
-You are an expert Kenyan legislative analyst. Analyze the following Bill text and produce a DETAILED, structured report using EXACTLY the section headers below. Be specific, factual, and plain in your language.
+You are an expert Kenyan legislative analyst. Analyze the following Bill text and produce a VITAL, topic-based summary. Focus on providing a pre-emptive overview that captures the most significant details for a citizen.
 
 IMPORTANT FORMATTING RULES:
-- Do NOT use any markdown symbols such as #, ##, *, **, _, or backticks.
-- Do NOT include any emojis or special symbols.
-- Use plain text only. Section headers should appear in ALL CAPS on their own line.
-- Sub-labels like "Action:", "Status:", or "Financial Cost:" should appear as plain labels followed by a colon.
+- Use TOPICS as main headers (ALL CAPS).
+- Use SUBTOPICS for specific details under each topic.
+- Do NOT use markdown symbols (#, *, etc.).
+- Use plain text only.
 
 ---
 
-QUICK SUMMARY
-Action: (What does this bill do in one sentence?)
-Target: (Who or what does it apply to?)
-Status: (Where is this bill in the legislative process? e.g. First Reading, Committee Stage, Assented to)
+TOPIC: AIM AND PURPOSE
+SUBTOPIC: Primary Objective: (What is the core problem this bill solves?)
+SUBTOPIC: Target Audience: (Who is directly affected?)
 
-IMPACT SCORECARD
-A quick bulleted overview of the bottom line:
-- Financial Cost: (Estimated public expenditure or financial implications, if stated)
-- Effective Date: (When does it come into force, if mentioned)
-- Key Stakeholders: (List the main groups directly affected, e.g. farmers, county governments, civil servants)
-- Administering Body: (Which ministry, authority, or agency is responsible for implementing this bill?)
+TOPIC: VITAL PROVISIONS
+SUBTOPIC: Provision 1: [Explanation]
+SUBTOPIC: Provision 2: [Explanation]
 
-KEY PROVISIONS
-Break the bill down into its 3-5 most significant provisions or clauses. For each, write 1-2 sentences explaining what it does in plain language. Format as:
-Provision 1: [explanation]
-Provision 2: [explanation]
-(continue as needed)
+TOPIC: IMPACT AND COST
+SUBTOPIC: Financial Implications: (What is the cost to the taxpayer?)
+SUBTOPIC: State Agency: (Who will manage this?)
 
-THE WHY vs. THE WHY NOT
-Official Justification: (Why did the government or sponsor say this bill is needed? What problem does it solve?)
-Points of Contention: (What are the main criticisms or concerns raised against this bill? Who opposes it and why?)
-
-FLOW OF LEGISLATION
-Describe the step-by-step journey of this bill through parliament. Include: who introduced it, which readings it has gone through, any committee referrals, and what the next step is.
+TOPIC: VOTING AND PROCEEDINGS
+SUBTOPIC: Status and Vote: (Based on the provided context, what was the outcome of the vote or current progress?)
 
 ---
 
-Output ONLY the structured report above. Do not add any preamble, conclusion, or commentary outside the sections.
+Output ONLY the structured report above.
 """
 
-async def generate_bill_summary(text: str) -> str:
-    """Generates a detailed structured summary of a Bill using Ollama."""
-    summary_text = text[:5000]
+async def generate_bill_summary(text: str, voting_context: str = "") -> str:
+    """Generates a detailed structured summary of a Bill using Ollama, enriched with voting context."""
+    summary_text = text[:8000] # Use more text for bills as they are structured
+    
+    prompt = f"{BILL_SUMMARY_PROMPT}\n\nBILL TEXT:\n{summary_text}"
+    if voting_context:
+        prompt += f"\n\nVOTING PROCEEDINGS CONTEXT:\n{voting_context}"
 
     async with httpx.AsyncClient() as client:
         try:
@@ -130,7 +124,7 @@ async def generate_bill_summary(text: str) -> str:
                 OLLAMA_API,
                 json={
                     "model": MODEL_NAME,
-                    "prompt": f"{BILL_SUMMARY_PROMPT}\n\nBILL TEXT:\n{summary_text}",
+                    "prompt": prompt,
                     "stream": False
                 },
                 timeout=TIMEOUT
@@ -139,14 +133,14 @@ async def generate_bill_summary(text: str) -> str:
                 result = response.json()
                 if not isinstance(result, dict):
                     logger.error(f"Unexpected Ollama bill summary response type: {type(result)}")
-                    return "Summary unavailable (Unexpected response)."
+                    return "Summary unavailable."
                 return result.get('response', '').strip()
             else:
-                logger.error(f"Ollama bill summary error: Status {response.status_code}, Body: {response.text}")
-                return "Summary generation failed (API error)."
+                logger.error(f"Ollama bill summary error: Status {response.status_code}")
+                return "Summary generation failed."
         except Exception as e:
-            logger.error(f"Ollama bill summarization exception: {type(e).__name__}: {e}")
-            return "Summary generation failed (Exception)."
+            logger.error(f"Ollama bill summarization exception: {e}")
+            return "Summary generation failed."
     return "Summary unavailable."
 
 async def extract_raw_text(pdf_path: str) -> str:

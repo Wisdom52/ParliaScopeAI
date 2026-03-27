@@ -4,6 +4,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.verification_request import LeaderVerificationRequest
 from app.models.speaker import Speaker
+from app.models.admin_audit import AdminAuditLog
 from app.routes.auth import get_current_admin_user
 from app.core.logger import logger
 from datetime import datetime
@@ -67,6 +68,14 @@ def authorize_leader(
     claim.admin_notes = f"Authorized by Admin {admin.email}"
 
     db.commit()
+    # Audit trail
+    db.add(AdminAuditLog(
+        admin_id=admin.id,
+        action="LEADER_AUTHORIZED",
+        target_user_id=user.id,
+        details=f"Authorized {user.email} as verified profile for {claim.speaker.name} ({claim.speaker.role})"
+    ))
+    db.commit()
     logger.info(f"Leader identity AUTHORIZED: {user.email} is now the verified account for {claim.speaker.name}")
     return {"detail": f"Leader identity for {claim.speaker.name} has been authorized."}
 
@@ -83,8 +92,15 @@ def toggle_leader_status(
 
     user.is_active = not user.is_active
     db.commit()
-    
     action = "RESUMED" if user.is_active else "PAUSED"
+    # Audit trail
+    db.add(AdminAuditLog(
+        admin_id=admin.id,
+        action=f"LEADER_{action}",
+        target_user_id=user.id,
+        details=f"Leader account {user.email} was {action}"
+    ))
+    db.commit()
     logger.info(f"Leader account {user.email} was {action} by admin {admin.email}")
     return {"detail": f"Leader account has been {action}.", "is_active": user.is_active}
 

@@ -73,8 +73,14 @@ def _date_from_url_path(href: str) -> Optional[datetime.date]:
 
 
 def _is_2026(title: str, href: str) -> bool:
-    """Returns True only if the document is from 2026."""
-    return "2026" in title or "/2026-" in href or "2026" in href
+    """Returns True only if the document is from 2026 and not another year."""
+    # If title has a 4-digit year that isn't 2026, it's not a 2026 document
+    year_match = re.search(r'\b(20\d{2})\b', title)
+    if year_match and year_match.group(1) != "2026":
+        return False
+    
+    # Must have 2026 in title or be in a 2026 folder
+    return "2026" in title or "/2026-" in href or "/2026/" in href or "2026" in href
 
 
 def _absolute_url(href: str) -> str:
@@ -155,7 +161,7 @@ def get_latest_bill_links(limit: int = 20) -> List[Dict]:
             href = a['href']
             text = a.get_text(strip=True)
 
-            is_pdf = ".pdf" in href.lower()
+            is_pdf = "/sites/default/files/" in href and href.lower().endswith(".pdf")
             is_bill = "bill" in text.lower() or "bill" in href.lower()
 
             if is_pdf and is_bill and _is_2026(text, href):
@@ -168,20 +174,46 @@ def get_latest_bill_links(limit: int = 20) -> List[Dict]:
                 if len(links) >= limit:
                     break
 
-        # Fallback: known 2026-era bill
-        fallback_url = "https://www.parliament.go.ke/sites/default/files/2026-02/THE%20NATIONAL%20COHESION%20AND%20INTERGRATION%20BILL%20%2C%202023.pdf"
-        if fallback_url not in seen_urls:
-            links.insert(0, {
-                "title": "The National Cohesion and Integration Bill, 2023",
-                "url": fallback_url,
-                "date": datetime.date(2026, 2, 1)
-            })
 
         logger.info(f"Found {len(links)} 2026 Bill links")
         return links[:limit] if limit > 0 else links
 
     except Exception as e:
         logger.error(f"Scraping Bills failed: {str(e)}")
+        return []
+
+def get_latest_voting_proceedings_links(limit: int = 10) -> List[Dict]:
+    """
+    Scrapes the Kenyan Parliament 'Votes and Proceedings' page and returns PDF links.
+    Returns: [{'title': str, 'url': str, 'date': datetime.date|None}]
+    """
+    url = "https://www.parliament.go.ke/the-national-assembly/house-business/votes-proceeding"
+    try:
+        logger.info(f"Scraping dynamic voting proceedings from {url}")
+        response = requests.get(url, timeout=30, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        links: List[Dict] = []
+        seen_urls: set = set()
+
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            text = a.get_text(strip=True)
+
+            if ".pdf" in href.lower() and _is_2026(text, href):
+                href = _absolute_url(href)
+                if href in seen_urls: continue
+                seen_urls.add(href)
+                doc_date = parse_date_from_title(text) or _date_from_url_path(href)
+                links.append({"title": text or "Votes & Proceedings", "url": href, "date": doc_date})
+                if len(links) >= limit: break
+
+        return links
+    except Exception as e:
+        logger.error(f"Scraping voting proceedings failed: {str(e)}")
         return []
 
 def extract_text_from_url(url: str) -> str:

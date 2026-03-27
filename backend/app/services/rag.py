@@ -1,4 +1,6 @@
+import json
 import ollama
+from ollama import AsyncClient
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.models.speech import SpeechSegment
@@ -26,7 +28,7 @@ def search_similar_segments(query: str, document_id: int, db: Session, limit: in
     logger.info(f"Found {len(results)} similar segments for query: '{query}'")
     return results
 
-def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
+async def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
     """
     RAG Pipeline:
     1. Embed query & search DB (filtered by doc_type and document_id).
@@ -71,10 +73,9 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
                 
                 Answer (be concise):"""
             else:
-                return {
-                    "answer": "I couldn't find any relevant information in this parliamentary record to answer your question.",
-                    "sources": []
-                }
+                yield json.dumps({"type": "sources", "data": []}) + "\n"
+                yield json.dumps({"type": "chunk", "data": "I couldn't find any relevant information in this parliamentary record to answer your question."}) + "\n"
+                return
         else:
             # Construct Context
             context_text = ""
@@ -105,22 +106,21 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
         
         bill = db.query(Bill).filter(Bill.id == document_id).first()
         if not bill:
-            return {
-                "answer": "I couldn't find this bill's context in the database.",
-                "sources": []
-            }
+            yield json.dumps({"type": "sources", "data": []}) + "\n"
+            yield json.dumps({"type": "chunk", "data": "I couldn't find this bill's context in the database."}) + "\n"
+            return
             
         impacts = bill.impacts
         
         if not bill.summary and not impacts:
-            return {
-                "answer": f"The detailed summary and impacts for the bill '{bill.title}' are still being processed. Please check back shortly.",
-                "sources": [{
-                    "speaker": "Official Bill Record",
-                    "preview": bill.title,
-                    "id": bill.id
-                }]
-            }
+            sources_fallback = [{
+                "speaker": "Official Bill Record",
+                "preview": bill.title,
+                "id": bill.id
+            }]
+            yield json.dumps({"type": "sources", "data": sources_fallback}) + "\n"
+            yield json.dumps({"type": "chunk", "data": f"The detailed summary and impacts for the bill '{bill.title}' are still being processed. Please check back shortly."}) + "\n"
+            return
             
         context_text = f"Bill Title: {bill.title}\n"
         if bill.summary:
@@ -148,23 +148,23 @@ def generate_answer(query: str, document_id: int, doc_type: str, db: Session):
         
         Answer (be concise and focus on the bill's provisions/impacts):"""
     
-    # Call Ollama
-    # Assumes 'llama3' is pulled, or falls back to 'mistral' or user default.
-    # We'll try 'llama3' first, user said "ollama is already installed", hopefully they have a model.
-    # We can default to 'llama3:latest'
+    # Send sources immediately so the UI updates
+    yield json.dumps({"type": "sources", "data": sources}) + "\n"
+
+    # Call Ollama asynchronously with stream=True
     try:
-        response = ollama.chat(model='llama3.2:3b', messages=[
-            {'role': 'user', 'content': prompt},
-        ])
-        answer = response['message']['content']
-        logger.info("Successfully generated AI answer via Ollama.")
+        async for chunk in await AsyncClient().chat(
+            model='llama3.2:3b', 
+            messages=[{'role': 'user', 'content': prompt}], 
+            stream=True
+        ):
+            content = chunk.get('message', {}).get('content', '')
+            if content:
+                yield json.dumps({"type": "chunk", "data": content}) + "\n"
+        logger.info("Successfully generated AI streaming answer via Ollama.")
     except Exception as e:
         # Fallback handling or specific error message
         logger.error(f"Error communicating with Ollama in generate_answer: {str(e)}", exc_info=True)
-        answer = f"Error communicating with Ollama: {str(e)}. Please ensure 'llama3.2:3b' model is pulled (ollama pull llama3.2:3b)."
-
-    return {
-        "answer": answer,
-        "sources": sources
-    }
+        err_msg = f"\n\n[Error communicating with Ollama: {str(e)}. Please ensure 'llama3.2:3b' model is installed.]"
+        yield json.dumps({"type": "chunk", "data": err_msg}) + "\n"
 

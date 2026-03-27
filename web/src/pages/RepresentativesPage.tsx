@@ -365,22 +365,31 @@ export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> =
                                             {selectedRep.reviews.length === 0 ? (
                                                 <p style={{ color: '#9ca3af', textAlign: 'center', padding: '2rem' }}>No reviews yet. Be the first to share your feedback!</p>
                                             ) : (
-                                                selectedRep.reviews.map(review => (
-                                                    <div key={review.id} style={{ padding: '1.25rem', border: '1px solid #f3f4f6', borderRadius: '12px' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                                            <span style={{ fontWeight: 600 }}>{review.user_name}</span>
-                                                            <div style={{ display: 'flex', gap: '2px' }}>
-                                                                {[...Array(5)].map((_, i) => (
-                                                                    <Star key={i} size={14} style={{ fill: i < review.rating ? '#eab308' : 'none', color: '#eab308' }} />
-                                                                ))}
+                                                selectedRep.reviews.map(review => {
+                                                    const officialReply = (review as any).official_response;
+                                                    return (
+                                                        <div key={review.id} style={{ padding: '1.25rem', border: '1px solid #f3f4f6', borderRadius: '12px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                                                <span style={{ fontWeight: 600 }}>{review.user_name}</span>
+                                                                <div style={{ display: 'flex', gap: '2px' }}>
+                                                                    {[...Array(5)].map((_, i) => (
+                                                                        <Star key={i} size={14} style={{ fill: i < review.rating ? '#eab308' : 'none', color: '#eab308' }} />
+                                                                    ))}
+                                                                </div>
                                                             </div>
+                                                            <p style={{ margin: 0, color: '#4b5563', fontSize: '0.95rem' }}>{review.comment}</p>
+                                                            <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                                                                {new Date(review.created_at).toLocaleDateString()}
+                                                            </div>
+                                                            {officialReply && (
+                                                                <div style={{ marginTop: '1rem', background: 'linear-gradient(135deg, #fef9c3, #fef08a)', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #eab308' }}>
+                                                                    <strong style={{ color: '#854d0e', fontSize: '0.85rem', display: 'block', marginBottom: '4px' }}>Official Response from {selectedRep.name}</strong>
+                                                                    <p style={{ margin: 0, color: '#713f12', fontSize: '0.9rem' }}>{officialReply}</p>
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                        <p style={{ margin: 0, color: '#4b5563', fontSize: '0.95rem' }}>{review.comment}</p>
-                                                        <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>
-                                                            {new Date(review.created_at).toLocaleDateString()}
-                                                        </div>
-                                                    </div>
-                                                ))
+                                                    );
+                                                })
                                             )}
                                         </div>
                                     </div>
@@ -422,6 +431,16 @@ export const RepresentativesPage: React.FC<{ onSwitchToProfile?: () => void }> =
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '4rem' }}>
                                             <Loader2 className="animate-spin" size={32} color="#007bff" />
                                             <p style={{ color: '#666' }}>AI is parsing historical transcripts and bills...</p>
+                                            <Button 
+                                                label="Cancel Analysis"
+                                                onPress={() => {
+                                                    setStanceLoading(false);
+                                                    // In a real app we would use AbortController here, 
+                                                    // but to keep it simple and safe for existing code:
+                                                    setStanceData(null);
+                                                }}
+                                                variant="outline"
+                                            />
                                         </div>
                                     ) : (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

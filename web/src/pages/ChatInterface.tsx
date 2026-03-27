@@ -57,17 +57,49 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSwitchToProfile,
                 }),
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                const botMsg: Message = {
-                    role: 'assistant',
-                    content: data.answer,
-                    sources: data.sources
-                };
-                setMessages(prev => [...prev, botMsg]);
-            } else {
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
                 setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.detail || 'Failed to get answer'}` }]);
+                return;
+            }
+
+            if (!response.body) return;
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let botMsg: Message = { role: 'assistant', content: '', sources: [] };
+            
+            // Add placeholder message to state
+            setMessages(prev => [...prev, botMsg]);
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.trim()) {
+                        try {
+                            const parsed = JSON.parse(line);
+                            if (parsed.type === 'sources') {
+                                botMsg.sources = parsed.data;
+                            } else if (parsed.type === 'chunk') {
+                                botMsg.content += parsed.data;
+                            }
+                            
+                            // Update React state incrementally
+                            setMessages(prev => {
+                                const newMsgs = [...prev];
+                                newMsgs[newMsgs.length - 1] = { ...botMsg };
+                                return newMsgs;
+                            });
+                        } catch (e) {
+                            console.error("Error parsing NDJSON line:", e);
+                        }
+                    }
+                }
             }
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);

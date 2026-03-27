@@ -17,7 +17,7 @@ from app.schemas import (
     BarazaUserScoreOut, BarazaBadgeOut,
     BarazaLivePulseCreate, BarazaLivePulseOut,
     BarazaLiveChatCreate, BarazaLiveChatOut,
-    BarazaQuizOut, BarazaGamificationStatus
+    BarazaQuizOut, BarazaGamificationStatus, OfficialResponseCreate
 )
 from app.routes.auth import get_current_user, get_current_user_optional
 from app.core.moderation import check_profanity, is_spam
@@ -421,8 +421,9 @@ def get_pulse_analytics(
 
 @router.get("/live/chat", response_model=List[BarazaLiveChatOut])
 def get_live_chats(db: Session = Depends(get_db)):
-    # Fetch the 50 most recent chats
-    chats = db.query(BarazaLiveChat).order_by(BarazaLiveChat.created_at.desc()).limit(50).all()
+    # Fetch chats from the last 12 hours (Standard Sitting window)
+    time_limit = datetime.now(timezone.utc) - timedelta(hours=12)
+    chats = db.query(BarazaLiveChat).filter(BarazaLiveChat.created_at >= time_limit).order_by(BarazaLiveChat.created_at.desc()).limit(100).all()
     # Reverse to return oldest to newest (better for UI appending)
     chats.reverse()
     for chat in chats:
@@ -447,7 +448,9 @@ def get_live_chat_analytics(
     if constituency_id:
         query = query.filter(User.constituency_id == constituency_id)
     
-    chats = query.order_by(BarazaLiveChat.created_at.desc()).limit(50).all()
+    # Apply standard 12-hour live window filter
+    time_limit = datetime.now(timezone.utc) - timedelta(hours=12)
+    chats = query.filter(BarazaLiveChat.created_at >= time_limit).order_by(BarazaLiveChat.created_at.desc()).limit(100).all()
     for chat in chats:
         if chat.user:
             if chat.user.is_anonymous_default:
@@ -486,9 +489,20 @@ def post_live_chat(
     if last_chats and last_chats[0].created_at > datetime.now(timezone.utc) - timedelta(seconds=3):
         raise HTTPException(status_code=429, detail="Slow down! You're chatting too fast.")
 
+    # 3. Attach current sitting title if available
+    # We look for a meeting happening right now
+    now = datetime.now(timezone.utc)
+    active_meeting = db.query(BarazaMeeting).filter(
+        (BarazaMeeting.scheduled_at <= now) & 
+        (BarazaMeeting.scheduled_at >= now - timedelta(hours=4))
+    ).first()
+    
+    s_title = active_meeting.title if active_meeting else "General Sitting"
+
     db_chat = BarazaLiveChat(
         message=chat.message,
-        user_id=current_user.id
+        user_id=current_user.id,
+        session_title=s_title
     )
     db.add(db_chat)
     db.commit()
@@ -498,6 +512,69 @@ def post_live_chat(
     else:
         db_chat.user_name = current_user.display_name or current_user.full_name
     return db_chat
+
+@router.get("/live/chat/sessions", response_model=List[str])
+def get_chat_session_titles(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Returns unique sitting titles for leaders to filter by."""
+    if current_user.role != "LEADER":
+        raise HTTPException(status_code=403, detail="Only leaders can access chat archives")
+    
+    titles = db.query(BarazaLiveChat.session_title).distinct().all()
+    return [t[0] for t in titles if t[0]]
+
+@router.get("/live/chat/archive", response_model=List[BarazaLiveChatOut])
+def get_archived_chats(
+    session_title: str,
+    county_id: Optional[int] = None,
+    constituency_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Retrieves full chat history for a specific sitting. Leader only."""
+    if current_user.role != "LEADER":
+        raise HTTPException(status_code=403, detail="Only leaders can access chat archives")
+    
+    query = db.query(BarazaLiveChat).join(User).filter(BarazaLiveChat.session_title == session_title)
+    if county_id:
+        query = query.filter(User.county_id == county_id)
+    if constituency_id:
+        query = query.filter(User.constituency_id == constituency_id)
+        
+    chats = query.order_by(BarazaLiveChat.created_at.asc()).all()
+    for chat in chats:
+        if chat.user:
+            chat.user_name = "Anonymous Citizen" if chat.user.is_anonymous_default else (chat.user.display_name or chat.user.full_name)
+        else:
+            chat.user_name = "Citizen"
+    return chats
+
+@router.post("/live/chat/{chat_id}/respond", response_model=BarazaLiveChatOut)
+def respond_to_live_chat(
+    chat_id: int,
+    response_data: OfficialResponseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "LEADER":
+        raise HTTPException(status_code=403, detail="Only leaders can respond to live chats")
+        
+    chat = db.query(BarazaLiveChat).filter(BarazaLiveChat.id == chat_id).first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    chat.official_response = response_data.response
+    db.commit()
+    db.refresh(chat)
+    
+    if chat.user:
+        chat.user_name = "Anonymous Citizen" if chat.user.is_anonymous_default else (chat.user.display_name or chat.user.full_name)
+    else:
+        chat.user_name = "Citizen"
+        
+    return chat
 
 # --- Civic IQ & Gamification ---
 

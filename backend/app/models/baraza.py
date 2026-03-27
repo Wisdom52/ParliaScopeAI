@@ -118,6 +118,8 @@ class BarazaLiveChat(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     message = Column(Text, nullable=False)
+    session_title = Column(String, nullable=True) # Official sitting name/link
+    official_response = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

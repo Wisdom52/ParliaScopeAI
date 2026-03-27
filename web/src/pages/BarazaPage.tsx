@@ -663,12 +663,23 @@ export const BarazaPage: React.FC<BarazaProps> = ({ onSwitchToProfile }) => {
                                         </div>
 
                                         <div className="live-chat-overlay" ref={chatContainerRef}>
-                                            {liveChats.map(c => (
-                                                <div key={c.id} className="chat-bubble">
-                                                    <span className="chat-author">{c.user_name}:</span>
-                                                    <span className="chat-msg">{c.message}</span>
-                                                </div>
-                                            ))}
+                                            {liveChats.map(c => {
+                                                const officialReply = (c as any).official_response;
+                                                return (
+                                                    <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+                                                        <div className="chat-bubble">
+                                                            <span className="chat-author">{c.user_name}:</span>
+                                                            <span className="chat-msg">{c.message}</span>
+                                                        </div>
+                                                        {officialReply && (
+                                                            <div className="chat-bubble" style={{ background: 'linear-gradient(135deg, #fef08a, #facc15)', color: '#854d0e', border: '1px solid #eab308', alignSelf: 'flex-start', marginLeft: '1rem', padding: '6px 10px' }}>
+                                                                <span className="chat-author" style={{ color: '#854d0e' }}>Official Response:</span>
+                                                                <span className="chat-msg" style={{ marginLeft: '4px' }}>{officialReply}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                     <div className="pulse-controls">

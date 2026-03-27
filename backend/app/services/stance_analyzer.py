@@ -51,6 +51,10 @@ def analyze_speaker_consistency(db: Session, speaker_id: int):
         else:
             raw_json = raw_output.strip()
         
+        # Final safety check before parsing
+        if not raw_json or not (raw_json.startswith('[') and raw_json.endswith(']')):
+             raise ValueError("LLM response did not contain a valid JSON array of topics.")
+             
         topic_info = json.loads(raw_json)
         
         # 3. Save to database (LeaderStance)
@@ -58,7 +62,8 @@ def analyze_speaker_consistency(db: Session, speaker_id: int):
         overall_score = 0
         for item in topic_info:
             # Ensure score is on 0-100 scale if LLM mistakenly gave 0-10
-            raw_score = float(item.get('consistency_score', 0))
+            raw_val = item.get('consistency_score', 0)
+            raw_score = float(raw_val) if raw_val is not None else 0.0
             if raw_score <= 10.0 and any(s.get('consistency_score', 0) > 0 for s in topic_info) and all(s.get('consistency_score', 0) <= 10.0 for s in topic_info):
                 # Heuristic: if ALL scores are <= 10, LLM likely used 0-10 scale
                 raw_score = raw_score * 10.0
@@ -88,6 +93,6 @@ def analyze_speaker_consistency(db: Session, speaker_id: int):
         print(f"Error in stance analysis: {e}")
         return {
             "overall_consistency": 0,
-            "summary": f"Analysis failed: {str(e)}",
+            "summary": "Stance analysis is currently unavailable or being processed for this leader. Please try again later.",
             "topic_breakdown": []
         }

@@ -10,6 +10,7 @@ from app.routes import auth, ingest, chat, audio, search, location, docs, subscr
 from app.routes.ingest import perform_hansard_crawl
 from app.database import SessionLocal, engine, Base
 import app.models # Trigger models registration
+from app.models import admin_audit  # Ensure admin_audit_logs table is created
 from fastapi.staticfiles import StaticFiles
 import asyncio
 

@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models.speaker import Speaker
 from app.models.representative_review import RepresentativeReview
 from app.models.user import User
-from app.schemas import SpeakerOut, ReviewCreate, ReviewOut
+from app.schemas import SpeakerOut, ReviewCreate, ReviewOut, OfficialResponseCreate
 from app.routes.auth import get_current_user
 from sqlalchemy import func
 
@@ -104,3 +104,56 @@ def create_review(
     
     db_review.user_name = "Anonymous Citizen" if current_user.is_anonymous_default else (current_user.display_name or current_user.full_name)
     return db_review
+
+@router.get("/{id}/reviews", response_model=List[ReviewOut])
+def get_representative_reviews(
+    id: int,
+    county_id: Optional[int] = None,
+    constituency_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(RepresentativeReview).join(User).filter(RepresentativeReview.speaker_id == id)
+    if county_id:
+        query = query.filter(User.county_id == county_id)
+    if constituency_id:
+        query = query.filter(User.constituency_id == constituency_id)
+        
+    reviews = query.order_by(RepresentativeReview.created_at.desc()).all()
+    
+    for review in reviews:
+        user = review.user
+        if user and user.is_anonymous_default:
+            review.user_name = "Anonymous Citizen"
+        else:
+            review.user_name = (user.display_name or user.full_name) if user else "Anonymous Citizen"
+            
+    return reviews
+
+@router.post("/{id}/reviews/{review_id}/respond", response_model=ReviewOut)
+def respond_to_review(
+    id: int,
+    review_id: int,
+    response_data: OfficialResponseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "LEADER":
+        raise HTTPException(status_code=403, detail="Only leaders can respond to reviews")
+        
+    rep = db.query(Speaker).filter(Speaker.id == id).first()
+    # Check if this leader is this speaker
+    # Current user might have speaker_id
+    if not rep or current_user.speaker_id != rep.id:
+        raise HTTPException(status_code=403, detail="You can only respond to your own reviews")
+        
+    review = db.query(RepresentativeReview).filter(RepresentativeReview.id == review_id, RepresentativeReview.speaker_id == id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+        
+    review.official_response = response_data.response
+    db.commit()
+    db.refresh(review)
+    
+    user = db.query(User).filter(User.id == review.user_id).first()
+    review.user_name = "Anonymous Citizen" if (user and user.is_anonymous_default) else (user.display_name or user.full_name if user else "Citizen")
+    return review

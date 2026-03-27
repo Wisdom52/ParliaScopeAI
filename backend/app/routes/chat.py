@@ -25,9 +25,11 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[Source]
 
-@router.post("/document", response_model=ChatResponse)
+from fastapi.responses import StreamingResponse
+
+@router.post("/document")
 @rate_limit(requests_per_minute=5)
-def chat_document(
+async def chat_document(
     request: ChatRequest, 
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_current_user_optional),
@@ -37,9 +39,11 @@ def chat_document(
         user_identity = user.email if user else "Guest (Anonymous)"
         logger.info(f"Forensic Audit: User {user_identity} queried document {request.document_id} ({request.doc_type}) with query: '{request.query}'")
         
-        # result is a dict {"answer": str, "sources": list}
-        result = generate_answer(request.query, request.document_id, request.doc_type, db)
-        return result
+        return StreamingResponse(
+            generate_answer(request.query, request.document_id, request.doc_type, db),
+            media_type="application/x-ndjson"
+        )
     except Exception as e:
-        print(f"Chat Error: {e}")
+        logger.error(f"Chat Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+

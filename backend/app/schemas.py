@@ -154,9 +154,13 @@ class ReviewOut(ReviewBase):
     speaker_id: int
     created_at: datetime
     user_name: Optional[str] = None
+    official_response: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+class OfficialResponseCreate(BaseModel):
+    response: str
 
 class SpeakerBase(BaseModel):
     name: str
@@ -317,6 +321,7 @@ class BarazaLiveChatOut(BaseModel):
     user_id: int
     user_name: Optional[str] = None
     created_at: datetime
+    official_response: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -405,3 +410,15 @@ class LeaderClaimRequest(BaseModel):
     staff_id: str
     maisha_card_url: Optional[str] = None
     staff_card_url: Optional[str] = None
+
+# --- Admin Audit Schemas ---
+class AdminAuditLogOut(BaseModel):
+    id: int
+    admin_id: int
+    action: str
+    target_user_id: Optional[int] = None
+    details: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
