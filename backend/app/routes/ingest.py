@@ -85,24 +85,9 @@ async def perform_bill_crawl(db: Session, limit: int = 5):
                             db.commit() # Save summary early
 
                             
-                            # Generate impacts safely
-                            try:
-                                impacts_data = generate_bill_impact(raw_text[:8000]) # Use first 8k chars for impact analysis
-                                for imp in impacts_data:
-                                    new_impact = BillImpact(
-                                        bill_id=bill.id,
-                                        archetype=imp.get('archetype', 'General'),
-                                        description=imp.get('description', 'None'),
-                                        sentiment=imp.get('sentiment', 'Neutral')
-                                    )
-                                    db.add(new_impact)
-                                
-                                db.commit()
-                                ingested.append({"title": link['title'], "impacts": len(impacts_data)})
-                            except Exception as impact_err:
-                                logger.error(f"Impact Analysis failed for {link['title']}: {impact_err}")
-                                db.rollback()
-                                ingested.append({"title": link['title'], "impacts": 0})
+                            # Removed default archetype generation per user request
+                            # Only profile-based personalized topics will be tracked on the frontend.
+                            ingested.append({"title": link['title'], "impacts": 0})
                     except Exception as e:
                         logger.error(f"Error during Impact Analysis of {link['title']}: {e}")
                     finally:

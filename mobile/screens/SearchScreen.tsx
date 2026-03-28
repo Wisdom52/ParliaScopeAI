@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, KeyboardAvoidingView, Platform, Modal, Alert } from 'react-native';
 import { Button } from '../components/ui/Button';
 import { ImpactCard } from '../components/ImpactCard';
 import { AudioPlayer } from '../components/ui/AudioPlayer';
@@ -23,6 +23,7 @@ interface Bill {
     date: string | null;
     document_url: string;
     impacts: any[];
+    matching_topics?: string[];
 }
 
 interface ChatMessage {
@@ -120,7 +121,12 @@ export const SearchScreen = () => {
     const [bills, setBills] = useState<Bill[]>([]);
     const [billsLoading, setBillsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [analyzingId, setAnalyzingId] = useState<number | null>(null);
+    
+    // Personalized Impact State
+    const [personalImpact, setPersonalImpact] = useState<any>(null);
+    const [loadingPersonal, setLoadingPersonal] = useState(false);
+    const [cachedImpacts, setCachedImpacts] = useState<Record<string, any>>({});
+    const [selectedBillForImpact, setSelectedBillForImpact] = useState<{ id: number; title: string; topic: string } | null>(null);
 
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -133,13 +139,20 @@ export const SearchScreen = () => {
     // Audio-First Engagement State
     const [audioData, setAudioData] = useState<{ en: string, sw: string } | null>(null);
     const [loadingAudio, setLoadingAudio] = useState(false);
+    const [audioLang, setAudioLang] = useState<'en' | 'sw'>('en');
 
     const scrollRef = useRef<ScrollView>(null);
 
     const fetchDocs = async (query = '') => {
         setDocsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/hansards/?q=${encodeURIComponent(query)}`);
+            const currentToken = token || await AsyncStorage.getItem('parliaScope_token');
+            const headers: Record<string, string> = {};
+            if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+            
+            const response = await fetch(`${API_BASE_URL}/hansards/?q=${encodeURIComponent(query)}`, {
+                headers
+            });
             if (response.ok) {
                 setDocuments(await response.json());
             }
@@ -155,9 +168,13 @@ export const SearchScreen = () => {
         if (audioData) return;
         setLoadingAudio(true);
         try {
+            const currentToken = token || await AsyncStorage.getItem('parliaScope_token');
+            const headers: Record<string, string> = {};
+            if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
             const [enRes, swRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=en`),
-                fetch(`${API_BASE_URL}/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=sw`)
+                fetch(`${API_BASE_URL}/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=en`, { headers }),
+                fetch(`${API_BASE_URL}/audio/daily-brief?item_id=${docId}&item_type=${docType}&lang=sw`, { headers })
             ]);
             if (enRes.ok && swRes.ok) {
                 const enData = await enRes.json();
@@ -176,7 +193,13 @@ export const SearchScreen = () => {
     const fetchBills = async (query = '') => {
         setBillsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/bills/?q=${encodeURIComponent(query)}`);
+            const currentToken = token || await AsyncStorage.getItem('parliaScope_token');
+            const headers: Record<string, string> = {};
+            if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
+            const response = await fetch(`${API_BASE_URL}/bills/?q=${encodeURIComponent(query)}`, {
+                headers
+            });
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -189,20 +212,47 @@ export const SearchScreen = () => {
         }
     };
 
-    const handleAnalyze = async (billId: number, rawText: string) => {
-        if (!token) return;
-        setAnalyzingId(billId);
+    const handlePersonalImpact = async (billId: number, billTitle: string, topic: string) => {
+        if (!token) {
+            Alert.alert("Authentication Required", "Please log in to use personalized tracking.");
+            return;
+        }
+        
+        const cacheKey = `${billId}_${topic}`;
+        setSelectedBillForImpact({ id: billId, title: billTitle, topic });
+
+        // Check cache first
+        if (cachedImpacts[cacheKey]) {
+            setPersonalImpact(cachedImpacts[cacheKey]);
+            setLoadingPersonal(false);
+            return;
+        }
+
+        setLoadingPersonal(true);
+        setPersonalImpact(null);
+
         try {
-            const response = await fetch(`${API_BASE_URL}/bills/${billId}/analyze?raw_text=${encodeURIComponent(rawText)}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+            const currentToken = token || await AsyncStorage.getItem('parliaScope_token');
+            const headers: Record<string, string> = {};
+            if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
+            const res = await fetch(`${API_BASE_URL}/bills/${billId}/personalized-impact?topic=${encodeURIComponent(topic)}`, {
+                headers
             });
-            if (response.ok) {
-                setTimeout(() => fetchBills(), 5000);
+            
+            if (res.ok) {
+                const data = await res.json();
+                setPersonalImpact(data);
+                // Store in cache
+                setCachedImpacts(prev => ({ ...prev, [cacheKey]: data }));
+            } else {
+                setPersonalImpact({ explanation: "Analysis could not be generated at this time. Please try again later.", sentiment: "Neutral" });
             }
-        } catch (error) {
-            console.error("Failed to start analysis:", error);
-            setAnalyzingId(null);
+        } catch (e) {
+            console.error(e);
+            setPersonalImpact({ explanation: "Connection error. Verify your internet and try again.", sentiment: "Neutral" });
+        } finally {
+            setLoadingPersonal(false);
         }
     };
 
@@ -216,24 +266,56 @@ export const SearchScreen = () => {
         try {
             const docId = selectedDoc?.id;
             const docType = activeCategory === 'bills' ? 'bill' : 'hansard';
+            
+            const currentToken = token || await AsyncStorage.getItem('parliaScope_token');
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
             const response = await fetch(`${API_BASE_URL}/chat/document`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ query: userMsg.content, document_id: docId, doc_type: docType }),
             });
 
-            const data = await response.json();
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${errorData.detail || "I couldn't process that request."}` }]);
+                return;
+            }
 
-            if (response.ok) {
+            // Mobile fetch doesn't support streaming well. 
+            // We read the entire response as text and parse the NDJSON lines.
+            const fullText = await response.text();
+            const lines = fullText.split('\n').filter(line => line.trim() !== '');
+            
+            let assistantAnswer = '';
+            let assistantSources = [];
+
+            for (const line of lines) {
+                try {
+                    const parsed = JSON.parse(line);
+                    if (parsed.type === 'sources') {
+                        assistantSources = parsed.data;
+                    } else if (parsed.type === 'chunk') {
+                        assistantAnswer += parsed.data;
+                    }
+                } catch (parseError) {
+                    console.warn("Failed to parse NDJSON line:", line);
+                }
+            }
+
+            if (assistantAnswer) {
                 setChatMessages(prev => [...prev, {
                     role: 'assistant',
-                    content: data.answer,
-                    sources: data.sources
+                    content: assistantAnswer,
+                    sources: assistantSources
                 }]);
             } else {
-                setChatMessages(prev => [...prev, { role: 'assistant', content: "I couldn't find that in the transcripts. Please try another question." }]);
+                setChatMessages(prev => [...prev, { role: 'assistant', content: "I couldn't find specific information in this document to answer that question." }]);
             }
+
         } catch (error) {
+            console.error("Chat error:", error);
             setChatMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);
         } finally {
             setChatLoading(false);
@@ -245,9 +327,13 @@ export const SearchScreen = () => {
         setFactLoading(true);
         setFactResult(null);
         try {
+            const currentToken = token || await AsyncStorage.getItem('parliaScope_token');
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
             const response = await fetch(`${API_BASE_URL}/fact-shield/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ url: url, claim_text: claim }),
             });
             if (response.ok) {
@@ -380,6 +466,26 @@ export const SearchScreen = () => {
                                     </View>
                                 </View>
                                 <Text style={styles.docDate}>{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</Text>
+                                
+                                {item.matching_topics && item.matching_topics.length > 0 && (
+                                    <View style={styles.topicPillsContainer}>
+                                        {item.matching_topics.map((topic: string, idx: number) => (
+                                            <TouchableOpacity 
+                                                key={idx} 
+                                                style={styles.topicPill}
+                                                onPress={(e) => {
+                                                    // Prevent card click from opening main bill modal
+                                                    e.stopPropagation();
+                                                    handlePersonalImpact(item.id, item.title, topic);
+                                                }}
+                                            >
+                                                <MaterialCommunityIcons name="pulse" size={14} color="#FFF" />
+                                                <Text style={styles.topicPillText}>Tracking: {topic}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                                
                                 <Text style={styles.docSnippet} numberOfLines={2}>{item.summary || "Analysis pending..."}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={20} color="#ccc" />
@@ -446,6 +552,48 @@ export const SearchScreen = () => {
                     </View>
 
                     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+                        {/* Audio-First Engagement UI */}
+                        <View style={styles.audioEngagementContainer}>
+                            <View style={styles.audioHeaderRow}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <View style={styles.audioPulseDot} />
+                                    <Text style={styles.audioEngagementTitle}>Listen to Summary</Text>
+                                </View>
+                                <View style={styles.languageToggle}>
+                                    <TouchableOpacity 
+                                        style={[styles.langBtn, audioLang === 'en' && styles.langBtnActive]}
+                                        onPress={() => setAudioLang('en')}
+                                    >
+                                        <Text style={[styles.langText, audioLang === 'en' && styles.langTextActive]}>EN</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={[styles.langBtn, audioLang === 'sw' && styles.langBtnActive]}
+                                        onPress={() => setAudioLang('sw')}
+                                    >
+                                        <Text style={[styles.langText, audioLang === 'sw' && styles.langTextActive]}>SW</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {loadingAudio ? (
+                                <View style={{ padding: 20, alignItems: 'center' }}>
+                                    <ActivityIndicator size="small" color="#007AFF" />
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 8 }}>Generating AI Audio...</Text>
+                                </View>
+                            ) : audioData?.[audioLang] ? (
+                                <AudioPlayer 
+                                    sourceUrl={`${API_BASE_URL.replace('/api', '')}${audioData[audioLang]}`} 
+                                    title={`${selectedDoc?.title} (${audioLang.toUpperCase()})`} 
+                                />
+                            ) : (
+                                <Button 
+                                    label="Generate Audio Summary" 
+                                    onPress={() => fetchAudio(selectedDoc!.id, activeCategory === 'bills' ? 'bill' : 'hansard')} 
+                                    loading={loadingAudio} 
+                                />
+                            )}
+                        </View>
+
                         <View style={styles.summarySection}>
                             <View style={styles.sectionBadge}>
                                 <MaterialCommunityIcons name="text-box-search" size={16} color="#007AFF" />
@@ -455,12 +603,10 @@ export const SearchScreen = () => {
                                 selectedDoc.ai_summary.split('\n').map((line: string, i: number) => {
                                     if (!line.trim() || line.trim() === '---') return <View key={i} style={{ height: 8 }} />;
 
-                                    // Port Section Header Logic from Web
                                     const isSectionHeader = (t: string) => {
                                         return t === t.toUpperCase() && t.length > 3 && /[A-Z]/.test(t) && !/^\d/.test(t);
                                     };
 
-                                    // Port Sub-Label Logic from Web
                                     const isSubLabel = (t: string) => {
                                         return /^[A-Z][A-Za-z\s]+:\s/.test(t);
                                     };
@@ -498,52 +644,11 @@ export const SearchScreen = () => {
                                 </Text>
                             )}
                             
-                            {/* Bill Specific Impacts Section - Moved to Modal */}
-                            {activeCategory === 'bills' && selectedDoc && (
-                                <View style={{ marginTop: 20 }}>
-                                    <View style={[styles.sectionBadge, { marginBottom: 15 }]}>
-                                        <MaterialCommunityIcons name="gavel" size={16} color="#10B981" />
-                                        <Text style={[styles.sectionBadgeText, { color: '#10B981' }]}>Impact Analysis</Text>
-                                    </View>
-                                    {selectedDoc.impacts && selectedDoc.impacts.length > 0 ? (
-                                        selectedDoc.impacts.map((impact: any) => <ImpactCard key={impact.id} impact={impact} />)
-                                    ) : (
-                                        <View style={styles.billEmptyAnalysis}>
-                                            <Button 
-                                                label="Initialize Impact Analysis" 
-                                                onPress={() => handleAnalyze(selectedDoc.id, selectedDoc.ai_summary)} 
-                                                loading={analyzingId === selectedDoc.id} 
-                                            />
-                                        </View>
-                                    )}
-                                </View>
-                            )}
-                            
                             {selectedDoc?.pdf_url && (
                                 <View style={styles.sourceTag}>
                                     <Text style={styles.sourceTagText}>AI-Generated Summary — Always verify against official source.</Text>
-                                    <TouchableOpacity onPress={() => {/* Linking could be added if needed but strictly porting web text */}}>
-                                        <Text style={styles.sourceLink}> parliament.go.ke Source</Text>
-                                    </TouchableOpacity>
                                 </View>
                             )}
-
-                            {/* Audio-First Engagement UI - Ported from Web */}
-                            <View style={styles.audioEngagementContainer}>
-                                <Text style={styles.audioEngagementTitle}>Audio-First Engagement</Text>
-                                {!audioData ? (
-                                    <Button 
-                                        label={loadingAudio ? "Generating Briefs..." : "Listen to Audio Summary"} 
-                                        onPress={() => fetchAudio(selectedDoc!.id, activeCategory === 'bills' ? 'bill' : 'hansard')} 
-                                        loading={loadingAudio} 
-                                    />
-                                ) : (
-                                    <View style={styles.audioPlayers}>
-                                        <AudioPlayer sourceUrl={audioData.en} title="🇬🇧 English Brief" />
-                                        <AudioPlayer sourceUrl={audioData.sw} title="🇰🇪 Kiswahili Brief" />
-                                    </View>
-                                )}
-                            </View>
                         </View>
 
                         <View style={styles.chatSection}>
@@ -578,6 +683,47 @@ export const SearchScreen = () => {
 
                     <MemoizedChatInput onSend={handleSendChat} disabled={chatLoading} />
                 </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Personalized Impact Modal */}
+            <Modal visible={!!selectedBillForImpact} animationType="fade" transparent={true} onRequestClose={() => setSelectedBillForImpact(null)}>
+                <View style={styles.impactModalOverlay}>
+                    <View style={styles.impactModalContent}>
+                        <View style={styles.impactModalHeaderRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                <MaterialCommunityIcons name="bullseye-arrow" size={24} color="#007AFF" />
+                                <Text style={styles.impactModalTitle} numberOfLines={1}>Impact on: {selectedBillForImpact?.topic}</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setSelectedBillForImpact(null)} style={{ padding: 5 }}>
+                                <MaterialCommunityIcons name="close" size={24} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <ScrollView style={{ maxHeight: 400 }}>
+                            {loadingPersonal ? (
+                                <View style={{ padding: 40, alignItems: 'center' }}>
+                                    <ActivityIndicator size="large" color="#007AFF" />
+                                    <Text style={{ marginTop: 15, color: '#666', fontWeight: '600' }}>AI Analysis in progress...</Text>
+                                </View>
+                            ) : personalImpact ? (
+                                <ImpactCard impact={{
+                                    id: 0,
+                                    archetype: selectedBillForImpact?.topic || 'General',
+                                    description: personalImpact.explanation,
+                                    sentiment: personalImpact.sentiment
+                                }} />
+                            ) : (
+                                <View style={{ padding: 20, alignItems: 'center' }}>
+                                    <Text style={{ color: '#666' }}>Analysis unavailable.</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+
+                        <TouchableOpacity style={styles.impactCloseButton} onPress={() => setSelectedBillForImpact(null)}>
+                            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </Modal>
         </View>
     );
@@ -626,6 +772,63 @@ const styles = StyleSheet.create({
     modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', maxWidth: '85%' },
     modalSub: { fontSize: 11, fontWeight: '700', color: '#007AFF', textTransform: 'uppercase', marginTop: 2 },
     modalCloseBtn: { padding: 8 },
+    audioEngagementContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    audioHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    audioPulseDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#FF3B30',
+    },
+    audioEngagementTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1c1c1e',
+    },
+    languageToggle: {
+        flexDirection: 'row',
+        backgroundColor: '#f2f2f7',
+        borderRadius: 8,
+        padding: 2,
+    },
+    langBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+    },
+    langBtnActive: {
+        backgroundColor: '#007AFF',
+    },
+    langText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#8e8e93',
+    },
+    langTextActive: {
+        color: '#fff',
+    },
+    errorAudioText: {
+        fontSize: 14,
+        color: '#FF3B30',
+        textAlign: 'center',
+        fontStyle: 'italic',
+        marginTop: 10,
+    },
     summarySection: { marginBottom: 30 },
     sectionBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
     sectionBadgeText: { fontSize: 12, fontWeight: '800', color: '#007AFF', textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -648,8 +851,6 @@ const styles = StyleSheet.create({
     sourceTag: { marginTop: 20, padding: 12, backgroundColor: '#F0F7FF', borderRadius: 10, borderLeftWidth: 4, borderLeftColor: '#007AFF' },
     sourceTagText: { fontSize: 12, color: '#444', fontStyle: 'italic' },
     sourceLink: { fontSize: 13, color: '#007AFF', fontWeight: '700', marginTop: 4, textDecorationLine: 'underline' },
-    audioEngagementContainer: { marginTop: 30, padding: 20, backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#eee' },
-    audioEngagementTitle: { fontSize: 16, fontWeight: '800', color: '#1a1a1a', marginBottom: 15 },
     audioPlayers: { gap: 10 },
 
     // Shield Styles
@@ -678,6 +879,23 @@ const styles = StyleSheet.create({
     sourcesHeader: { fontSize: 12, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 12 },
     shieldSourceItem: { marginBottom: 15, padding: 12, backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#edf2f7' },
     sourceTitle: { fontSize: 13, fontWeight: '700', color: '#007AFF', marginBottom: 4 },
-    sourcePreview: { fontSize: 12, color: '#666', fontStyle: 'italic' }
+    sourcePreview: { fontSize: 12, color: '#666', fontStyle: 'italic' },
+    
+    // Tracking Pill Styles
+    topicPillsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+    topicPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 6 },
+    topicPillText: { fontSize: 11, fontWeight: '800', color: '#FFF' },
+    
+    // Impact Modal Styles
+    impactModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    impactModalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+    impactModalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+    impactModalTitle: { fontSize: 16, fontWeight: '800', color: '#007AFF', flexShrink: 1 },
+    impactExplanationText: { fontSize: 15, color: '#333', lineHeight: 24, marginBottom: 20 },
+    sentimentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+    sentimentLabel: { fontSize: 11, fontWeight: '800', color: '#666' },
+    sentimentBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    sentimentText: { fontSize: 11, fontWeight: '800' },
+    impactCloseButton: { backgroundColor: '#007AFF', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 15 }
 });
 

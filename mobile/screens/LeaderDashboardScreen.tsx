@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, RefreshControl,
-    TouchableOpacity, ActivityIndicator, SafeAreaView, Platform
+    TouchableOpacity, ActivityIndicator, SafeAreaView, Platform, Alert, TextInput
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../config/api';
@@ -14,6 +14,11 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
     const [liveChats, setLiveChats] = useState<any[]>([]);
     const [stanceData, setStanceData] = useState<any>(null);
     const [filterMode, setFilterMode] = useState<'National' | 'Local'>('Local');
+    const [sessions, setSessions] = useState<string[]>([]);
+    const [selectedSessionOption, setSelectedSessionOption] = useState<string>('live');
+    const [responses, setResponses] = useState<Record<string, string>>({});
+    const [replyingTo, setReplyingTo] = useState<string | null>(null);
+    const [replyText, setReplyText] = useState('');
     const [activeTab, setActiveTab] = useState<'overview' | 'stances' | 'feedback'>('overview');
 
     useEffect(() => {
@@ -22,10 +27,52 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                 setLoading(false);
                 setRefreshing(false);
             });
+            fetchSessions();
         } else {
             setLoading(false);
         }
     }, [user]);
+
+    const fetchSessions = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/baraza/live/chat/sessions`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            if (res.ok) setSessions(await res.json());
+        } catch (e) {
+            console.error("Failed to fetch sessions", e);
+        }
+    };
+
+    const handleSubmitReply = async (idStr: string) => {
+        if (!replyText.trim()) return;
+        
+        try {
+            const isStance = idStr.startsWith('stance_');
+            const actualId = parseInt(idStr.split('_')[1], 10);
+            
+            if (isStance) {
+                await fetch(`${API_BASE_URL}/baraza/live/chat/${actualId}/respond`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ response: replyText })
+                });
+            } else if (user?.speaker_id) {
+                await fetch(`${API_BASE_URL}/representatives/${user.speaker_id}/reviews/${actualId}/respond`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ response: replyText })
+                });
+            }
+
+            setResponses(prev => ({ ...prev, [idStr]: replyText }));
+            setReplyingTo(null);
+            setReplyText('');
+            fetchStats(); // Refresh local payload
+        } catch (e) {
+            Alert.alert('Error', 'Failed to save response to database.');
+        }
+    };
 
     useEffect(() => {
         if (user?.role !== 'LEADER') return;
@@ -90,7 +137,7 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
     const renderOverview = () => (
         <View style={styles.overviewContainer}>
             <View style={styles.statsGrid}>
-                <View style={[styles.statCard, { width: '100%' }]}>
+                <View style={[styles.statCard, { width: '48%' }]}>
                     <View style={[styles.statIcon, { backgroundColor: '#FEF9C3' }]}>
                         <MaterialCommunityIcons name="star" size={24} color="#A16207" />
                     </View>
@@ -99,9 +146,40 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                         <Text style={styles.statTotal}>/ 5.0</Text>
                     </View>
                     <Text style={styles.statLabel}>Public Approval</Text>
-                    <Text style={styles.statFooter}>Based on constituent reviews</Text>
+                    <Text style={styles.statFooter} numberOfLines={1}>Based on reviews</Text>
+                </View>
+                
+                <View style={[styles.statCard, { width: '48%' }]}>
+                    <View style={[styles.statIcon, { backgroundColor: '#E0F2FE' }]}>
+                        <MaterialCommunityIcons name="shield-check" size={24} color="#0369A1" />
+                    </View>
+                    <View style={styles.statMain}>
+                        <Text style={styles.statLabel}>Sitting Archives</Text>
+                    </View>
+                    <Text style={[styles.statFooter, { marginTop: 8 }]} numberOfLines={2}>Review historical constituent stances.</Text>
                 </View>
             </View>
+
+            <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Baraza Archives</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                <TouchableOpacity 
+                    style={[styles.sessionPill, selectedSessionOption === 'live' && styles.sessionPillActive]}
+                    onPress={() => { setSelectedSessionOption('live'); setActiveTab('stances'); }}
+                >
+                    <Text style={[styles.sessionPillText, selectedSessionOption === 'live' && styles.sessionPillTextActive]}>Current Live Session</Text>
+                </TouchableOpacity>
+                {sessions.map(s => (
+                    <TouchableOpacity 
+                        key={s}
+                        style={[styles.sessionPill, selectedSessionOption === s && styles.sessionPillActive]}
+                        onPress={() => { setSelectedSessionOption(s); setActiveTab('stances'); }}
+                    >
+                        <Text style={[styles.sessionPillText, selectedSessionOption === s && styles.sessionPillTextActive]}>{s}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
 
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Performance Analytics</Text>
@@ -162,6 +240,38 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                                 <Text style={styles.sTime}>{new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                             </View>
                             <Text style={styles.sText}>{chat.message}</Text>
+                            
+                            {(responses[`stance_${chat.id}`] || chat.official_response) ? (
+                                <View style={styles.officialResponseContainer}>
+                                    <Text style={styles.officialResponseHeader}>Official Response:</Text>
+                                    <Text style={styles.officialResponseText}>{responses[`stance_${chat.id}`] || chat.official_response}</Text>
+                                </View>
+                            ) : replyingTo === `stance_${chat.id}` ? (
+                                <View style={styles.replyArea}>
+                                    <TextInput 
+                                        style={styles.replyInput}
+                                        value={replyText}
+                                        onChangeText={setReplyText}
+                                        placeholder="Type official reply..."
+                                        autoFocus
+                                    />
+                                    <View style={styles.replyActionRow}>
+                                        <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                                            <Text style={styles.replyCancelBtn}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleSubmitReply(`stance_${chat.id}`)} style={styles.replySubmitBtn}>
+                                            <Text style={styles.replySubmitBtnText}>Send</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ) : (
+                                <TouchableOpacity 
+                                    style={styles.respondBtn}
+                                    onPress={() => { setReplyingTo(`stance_${chat.id}`); setReplyText(''); }}
+                                >
+                                    <Text style={styles.respondBtnText}>Respond Officially</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     ))
                 )}
@@ -198,6 +308,38 @@ export const LeaderDashboardScreen: React.FC<{ user: any; token: string | null }
                             </View>
                             <Text style={styles.fText}>"{rev.comment}"</Text>
                             <Text style={styles.fAuthor}>- {rev.user_name}</Text>
+
+                            {(responses[`review_${rev.id}`] || rev.official_response) ? (
+                                <View style={styles.officialResponseContainer}>
+                                    <Text style={styles.officialResponseHeader}>Official Response:</Text>
+                                    <Text style={styles.officialResponseText}>{responses[`review_${rev.id}`] || rev.official_response}</Text>
+                                </View>
+                            ) : replyingTo === `review_${rev.id}` ? (
+                                <View style={styles.replyArea}>
+                                    <TextInput 
+                                        style={styles.replyInput}
+                                        value={replyText}
+                                        onChangeText={setReplyText}
+                                        placeholder="Type official reply..."
+                                        autoFocus
+                                    />
+                                    <View style={styles.replyActionRow}>
+                                        <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                                            <Text style={styles.replyCancelBtn}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleSubmitReply(`review_${rev.id}`)} style={styles.replySubmitBtn}>
+                                            <Text style={styles.replySubmitBtnText}>Send</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ) : (
+                                <TouchableOpacity 
+                                    style={styles.respondBtn}
+                                    onPress={() => { setReplyingTo(`review_${rev.id}`); setReplyText(''); }}
+                                >
+                                    <Text style={styles.respondBtnText}>Respond Officially</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     ))
                 )}
@@ -337,4 +479,23 @@ const styles = StyleSheet.create({
     
     emptyFeed: { alignItems: 'center', marginTop: 60, padding: 40 },
     emptyText: { marginTop: 15, color: '#8E8E93', fontSize: 15, textAlign: 'center' },
+
+    sessionPill: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#D1D1D6', marginRight: 8 },
+    sessionPillActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+    sessionPillText: { fontSize: 13, fontWeight: '600', color: '#3A3A3C' },
+    sessionPillTextActive: { color: '#fff' },
+
+    officialResponseContainer: { marginTop: 12, backgroundColor: '#EEF2FF', padding: 10, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#007AFF' },
+    officialResponseHeader: { color: '#007AFF', fontWeight: '800', fontSize: 12, marginBottom: 4 },
+    officialResponseText: { color: '#333', fontSize: 13, lineHeight: 18 },
+
+    respondBtn: { alignSelf: 'flex-end', marginTop: 10 },
+    respondBtnText: { color: '#007AFF', fontSize: 12, fontWeight: '700' },
+    
+    replyArea: { marginTop: 10 },
+    replyInput: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 8, padding: 10, fontSize: 13, minHeight: 40 },
+    replyActionRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8, gap: 12 },
+    replyCancelBtn: { color: '#8E8E93', fontSize: 12, fontWeight: '600' },
+    replySubmitBtn: { backgroundColor: '#007AFF', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6 },
+    replySubmitBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' }
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/ui/Button';
-import { Loader2, FileText, Activity, Send, MessageSquare, Search, X, Shield, Headphones } from 'lucide-react';
+import { Loader2, FileText, Activity, Send, MessageSquare, Search, X, Shield, Headphones, Target } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AudioPlayer } from '../components/ui/AudioPlayer';
 
@@ -149,6 +149,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
     const [factLoading, setFactLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
+    // Personal Impact State
+    const [personalImpact, setPersonalImpact] = useState<{ topic: string, explanation: string, sentiment: string } | null>(null);
+    const [loadingPersonal, setLoadingPersonal] = useState(false);
+
     const fetchDocs = async (query = '') => {
         setDocsLoading(true);
         try {
@@ -166,7 +170,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
         setBillsLoading(true);
         try {
             const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
-            const response = await fetch(`${apiBase}/bills/?q=${encodeURIComponent(query)}`);
+            const response = await fetch(`${apiBase}/bills/?q=${encodeURIComponent(query)}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
             if (response.ok) {
                 const data = await response.json();
                 setBills(data);
@@ -175,6 +181,28 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
             console.error("Failed to fetch bills:", error);
         } finally {
             setBillsLoading(false);
+        }
+    };
+
+    const handlePersonalImpact = async (billId: number, topic: string) => {
+        setLoadingPersonal(true);
+        setPersonalImpact({ topic, explanation: "AI is analyzing how this bill affects your interest in " + topic + "...", sentiment: "Neutral" });
+        try {
+            const apiBase = (window as any).API_BASE_URL || 'http://localhost:8000';
+            const res = await fetch(`${apiBase}/bills/${billId}/personalized-impact?topic=${encodeURIComponent(topic)}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPersonalImpact(data);
+            } else {
+                setPersonalImpact({ topic, explanation: "Failed to generate AI analysis for this topic.", sentiment: "Neutral" });
+            }
+        } catch (err) {
+            console.error(err);
+            setPersonalImpact(null);
+        } finally {
+            setLoadingPersonal(false);
         }
     };
 
@@ -341,6 +369,36 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
 
     return (
         <div className="search-page-container">
+            {/* Personalized Impact Modal */}
+            {personalImpact && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setPersonalImpact(null)}>
+                    <div className="card" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: 'white', position: 'relative', borderRadius: '1rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setPersonalImpact(null)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer' }}>
+                            <X size={24} color="#666" />
+                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', color: 'var(--primary)' }}>
+                            <Target size={24} />
+                            <h2 style={{ margin: 0 }}>Impact on: {personalImpact.topic}</h2>
+                        </div>
+                        <div style={{ background: '#f8f9fa', padding: '1.25rem', borderRadius: '12px', marginBottom: '1.5rem', borderLeft: `6px solid ${personalImpact.sentiment === 'Positive' ? '#22c55e' : personalImpact.sentiment === 'Negative' ? '#ef4444' : '#6b7280'}` }}>
+                            {loadingPersonal && <Loader2 className="animate-spin" size={24} style={{ marginBottom: '10px' }} />}
+                            <p style={{ fontSize: '1.1rem', lineHeight: '1.6', margin: 0, color: '#1a1a1a' }}>{personalImpact.explanation}</p>
+                            <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#666' }}>SITUATION SENTIMENT:</span>
+                                <span style={{ 
+                                    padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, 
+                                    background: personalImpact.sentiment === 'Positive' ? '#dcfce7' : personalImpact.sentiment === 'Negative' ? '#fee2e2' : '#f3f4f6',
+                                    color: personalImpact.sentiment === 'Positive' ? '#166534' : personalImpact.sentiment === 'Negative' ? '#991b1b' : '#374151'
+                                }}>
+                                    {personalImpact.sentiment.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                        <Button label="Close" onPress={() => setPersonalImpact(null)} />
+                    </div>
+                </div>
+            )}
+
             <div className="search-main-content" style={{ maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
                 <div className="page-header">
                     <h2>Documents Hub</h2>
@@ -562,6 +620,29 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onSwitchToProfile }) => 
                                             </div>
                                         </div>
                                         <div style={{ fontWeight: '700', fontSize: '1rem', marginBottom: '0.5rem', color: '#1a1a1a', lineHeight: '1.4' }}>{bill.title}</div>
+                                        {/* Personalized Impact Pills */}
+                                        {/* @ts-ignore */}
+                                        {bill.matching_topics && bill.matching_topics.length > 0 && (
+                                            <div style={{ display: 'flex', gap: '8px', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                                                {/* @ts-ignore */}
+                                                {bill.matching_topics.map(topic => (
+                                                    <button 
+                                                        key={topic} 
+                                                        onClick={(e) => { e.stopPropagation(); handlePersonalImpact(bill.id, topic); }}
+                                                        style={{ 
+                                                            background: '#22c55e', color: 'white', border: 'none', padding: '4px 10px', 
+                                                            borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                                                            display: 'inline-flex', alignItems: 'center', gap: '4px', transition: 'transform 0.2s',
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                                        }}
+                                                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                                    >
+                                                        <Activity size={12} /> Tracking: {topic}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                         <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                             {bill.summary || "Summary pending..."}
                                         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, RefreshControl,
-    TouchableOpacity, ActivityIndicator, SafeAreaView, FlatList, Alert, Image, Platform
+    TouchableOpacity, ActivityIndicator, SafeAreaView, FlatList, Alert, Image, Platform, TextInput
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../config/api';
@@ -9,12 +9,16 @@ import { API_BASE_URL } from '../config/api';
 interface AdminDashboardProps {
     user: any;
     token: string | null;
+    activeTab: 'overview' | 'users' | 'system' | 'database';
 }
 
-export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, token }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'system' | 'database'>('overview');
+export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, token, activeTab }) => {
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    
+    // Search and filter state for Citizens
+    const [searchQuery, setSearchQuery] = useState('');
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'citizen'>('all');
     
     // Data states
     const [stats, setStats] = useState<any>(null);
@@ -29,6 +33,10 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
     const [tables, setTables] = useState<string[]>([]);
     const [selectedTable, setSelectedTable] = useState<string | null>(null);
     const [tableData, setTableData] = useState<any>(null);
+
+    // Health states
+    const [health, setHealth] = useState<any>(null);
+    const [healthLoading, setHealthLoading] = useState(false);
     
     // Modal state for leader review
     const [reviewClaim, setReviewClaim] = useState<any>(null);
@@ -81,10 +89,32 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
         }
     };
 
+    const fetchHealth = async () => {
+        setHealthLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/health`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) setHealth(await res.json());
+        } catch (e) {
+            console.error("Health fetch failed", e);
+        } finally {
+            setHealthLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'system') {
+            fetchHealth();
+            const timer = setInterval(fetchHealth, 10000);
+            return () => clearInterval(timer);
+        }
+    }, [activeTab]);
+
     const fetchTableData = async (tableName: string) => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/admin/db/table/${tableName}`, {
+            const res = await fetch(`${API_BASE_URL}/admin/db/table/${tableName}?limit=50`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -278,11 +308,42 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
             </View>
 
             {userTab === 'citizens' ? (
-                <FlatList
-                    data={users.filter(u => u.role !== 'LEADER')}
-                    keyExtractor={(item) => item.id.toString()}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                    renderItem={({ item }) => (
+                <>
+                    <View style={{ paddingHorizontal: 15, marginBottom: 10, gap: 10 }}>
+                        <TextInput
+                            style={{ backgroundColor: '#fff', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 8, fontSize: 14, borderWidth: 1, borderColor: '#E5E5EA' }}
+                            placeholder="Search by name or email…"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            {(['all', 'admin', 'citizen'] as const).map(f => (
+                                <TouchableOpacity 
+                                    key={f}
+                                    style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: roleFilter === f ? '#007AFF' : '#E5E5EA' }}
+                                    onPress={() => setRoleFilter(f)}
+                                >
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: roleFilter === f ? '#fff' : '#8E8E93', textTransform: 'capitalize' }}>
+                                        {f}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                    <FlatList
+                        data={users.filter(u => u.role !== 'LEADER').filter(u => {
+                            if (roleFilter === 'admin' && !u.is_admin) return false;
+                            if (roleFilter === 'citizen' && u.is_admin) return false;
+                            if (searchQuery.trim()) {
+                                const q = searchQuery.toLowerCase();
+                                return u.email?.toLowerCase().includes(q) || u.full_name?.toLowerCase().includes(q);
+                            }
+                            return true;
+                        })}
+                        keyExtractor={(item) => item.id.toString()}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 30, color: '#8E8E93' }}>No citizens found.</Text>}
+                        renderItem={({ item }) => (
                         <View style={styles.userCard}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.userName}>{item.full_name || 'Guest User'}</Text>
@@ -308,8 +369,9 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    )}
-                />
+                        )}
+                    />
+                </>
             ) : (
                 <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
                     {pendingLeaders.length > 0 && (
@@ -459,17 +521,70 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
                             <MaterialCommunityIcons name="chevron-right" size={20} color="#C7C7CC" />
                         </TouchableOpacity>
                     )}
-                    ListHeaderComponent={<Text style={styles.sectionTitle}>Database Tables</Text>}
+                    ListHeaderComponent={(
+                        <View style={[styles.row, { justifyContent: 'space-between', marginBottom: 12 }]}>
+                            <Text style={styles.sectionTitle}>Database Tables</Text>
+                            <TouchableOpacity onPress={() => fetchData()}>
+                                <MaterialCommunityIcons name="refresh" size={20} color="#007AFF" />
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 />
             )}
         </View>
     );
+
+    const GaugeBar: React.FC<{ label: string; value: number; subLabel?: string }> = ({ label, value, subLabel }) => {
+        const pct = Math.min(100, value);
+        const color = pct > 85 ? '#FF3B30' : pct > 60 ? '#FF9500' : '#34C759';
+        return (
+            <View style={{ marginBottom: 15 }}>
+                <View style={[styles.row, { justifyContent: 'space-between', marginBottom: 6 }]}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#1C1C1E' }}>{label}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color }}>{value}% {subLabel ? `— ${subLabel}` : ''}</Text>
+                </View>
+                <View style={{ height: 10, backgroundColor: '#E5E5EA', borderRadius: 5, overflow: 'hidden' }}>
+                    <View style={{ height: '100%', width: `${pct}%`, backgroundColor: color }} />
+                </View>
+            </View>
+        );
+    };
 
     const renderSystem = () => (
         <ScrollView 
             style={styles.tabContent}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>System Health Monitor</Text>
+                <View style={styles.card}>
+                    {health ? (
+                        <>
+                            <GaugeBar label="CPU Load" value={health.cpu.percent} />
+                            <GaugeBar label="RAM (Memory)" value={health.ram.percent} subLabel={`${health.ram.used_gb}/${health.ram.total_gb} GB`} />
+                            <GaugeBar label="Disk Usage" value={health.disk.percent} subLabel={`${health.disk.used_gb}/${health.disk.total_gb} GB`} />
+                            
+                            <View style={{ marginTop: 5, borderTopWidth: 1, borderTopColor: '#F2F2F7', paddingTop: 15 }}>
+                                <View style={[styles.row, { justifyContent: 'space-between' }]}>
+                                    <View style={styles.row}>
+                                        <MaterialCommunityIcons name="database" size={18} color={health.database.ok ? "#34C759" : "#FF3B30"} />
+                                        <Text style={{ fontSize: 14, fontWeight: '600', color: '#1C1C1E' }}>PostgreSQL</Text>
+                                    </View>
+                                    <Text style={{ fontSize: 12, fontWeight: '800', color: health.database.ok ? "#34C759" : "#FF3B30" }}>
+                                        {health.database.ok ? 'ONLINE' : 'OFFLINE'} ({health.database.latency_ms}ms)
+                                    </Text>
+                                </View>
+                            </View>
+                        </>
+                    ) : (
+                        <View style={{ padding: 20, alignItems: 'center' }}>
+                            <ActivityIndicator color="#007AFF" />
+                            <Text style={{ marginTop: 10, color: '#8E8E93', fontSize: 13 }}>Fetching system metrics...</Text>
+                        </View>
+                    )}
+                </View>
+            </View>
+
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Data Pipeline</Text>
                 <View style={styles.card}>
@@ -534,21 +649,6 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
             <View style={styles.appHeader}>
                 <Text style={styles.headerTitle}>System Admin Portal</Text>
             </View>
-            
-            <View style={styles.mainTabs}>
-                <TouchableOpacity onPress={() => setActiveTab('overview')} style={[styles.mainTab, activeTab === 'overview' && styles.mainTabActive]}>
-                    <Text style={[styles.mainTabText, activeTab === 'overview' && styles.mainTabTextActive]}>Overview</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setActiveTab('users')} style={[styles.mainTab, activeTab === 'users' && styles.mainTabActive]}>
-                    <Text style={[styles.mainTabText, activeTab === 'users' && styles.mainTabTextActive]}>Users</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setActiveTab('system')} style={[styles.mainTab, activeTab === 'system' && styles.mainTabActive]}>
-                    <Text style={[styles.mainTabText, activeTab === 'system' && styles.mainTabTextActive]}>System</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setActiveTab('database')} style={[styles.mainTab, activeTab === 'database' && styles.mainTabActive]}>
-                    <Text style={[styles.mainTabText, activeTab === 'database' && styles.mainTabTextActive]}>Database</Text>
-                </TouchableOpacity>
-            </View>
 
             {loading && !refreshing && (
                 <View style={styles.absoluteLoading}>
@@ -556,7 +656,7 @@ export const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ user, toke
                 </View>
             )}
 
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingTop: 10 }}>
                 {activeTab === 'overview' ? renderOverview() : 
                  activeTab === 'users' ? renderUsers() : 
                  activeTab === 'system' ? renderSystem() : renderDatabase()}

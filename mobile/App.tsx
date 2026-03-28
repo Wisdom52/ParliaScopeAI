@@ -15,17 +15,23 @@ import { BarazaScreen } from './screens/BarazaScreen';
 import { AdminDashboardScreen } from './screens/AdminDashboardScreen';
 import { API_BASE_URL } from './config/api';
 
-type TabId = 'daily' | 'docs' | 'baraza' | 'representative' | 'profile' | 'admin_dash';
+type TabId = 'daily' | 'docs' | 'baraza' | 'representative' | 'profile' | 'admin_overview' | 'admin_users' | 'admin_system' | 'admin_database';
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
     { id: 'docs', label: 'Docs', icon: 'file-document-outline' },
     { id: 'baraza', label: 'Baraza', icon: 'forum-outline' },
     { id: 'representative', label: 'Leaders', icon: 'account-group-outline' },
+    { id: 'admin_overview', label: 'Overview', icon: 'view-dashboard-outline' },
+    { id: 'admin_users', label: 'Users', icon: 'account-group-outline' },
+    { id: 'admin_system', label: 'System', icon: 'server-network' },
+    { id: 'admin_database', label: 'Database', icon: 'database-outline' },
     { id: 'profile', label: 'Profile', icon: 'account-outline' },
 ];
 
 const LEADER_TABS: TabId[] = ['baraza', 'representative', 'profile'];
-const ADMIN_TABS: TabId[] = ['admin_dash', 'profile'];
+const ADMIN_TABS: TabId[] = ['admin_overview', 'admin_users', 'admin_system', 'admin_database', 'profile'];
+const CITIZEN_TABS: TabId[] = ['docs', 'baraza', 'representative', 'profile'];
+const GUEST_TABS: TabId[] = ['docs', 'baraza', 'representative', 'profile'];
 
 export default function App() {
     const [user, setUser] = useState<any>(null);
@@ -57,9 +63,9 @@ export default function App() {
 
     useEffect(() => {
         if (user?.is_admin) {
-            // Allow admin to move freely, default to admin_dash if on forbidden daily/docs
-            if (activeTab === 'daily' || activeTab === 'docs') {
-                setActiveTab('admin_dash');
+            // Allow admin to move freely, default to admin_overview if on forbidden tabs
+            if (!ADMIN_TABS.includes(activeTab)) {
+                setActiveTab('admin_overview');
             }
         } else if (user?.role === 'LEADER') {
             if (activeTab === 'daily' || activeTab === 'docs') {
@@ -94,7 +100,9 @@ export default function App() {
                 {activeTab === 'representative' && (
                     user?.role === 'LEADER' ? <LeaderDashboardScreen user={user} token={token} /> : <RepresentativeScreen onSwitchToProfile={() => setActiveTab('profile')} />
                 )}
-                {activeTab === 'admin_dash' && user?.is_admin && <AdminDashboardScreen user={user} token={token} />}
+                {['admin_overview', 'admin_users', 'admin_system', 'admin_database'].includes(activeTab as string) && user?.is_admin && (
+                    <AdminDashboardScreen user={user} token={token} activeTab={activeTab.replace('admin_', '') as any} />
+                )}
                 {activeTab === 'profile' && (
                     user ? (
                         <ProfileScreen
@@ -111,7 +119,12 @@ export default function App() {
 
             {/* Bottom Tab Bar */}
             <View style={styles.tabBar}>
-                {TABS.filter(t => user?.role === 'LEADER' ? LEADER_TABS.includes(t.id) : (user?.is_admin ? ADMIN_TABS.includes(t.id) : true)).map(tab => (
+                {TABS.filter(t => {
+                    if (!user) return GUEST_TABS.includes(t.id);
+                    if (user.is_admin) return ADMIN_TABS.includes(t.id);
+                    if (user.role === 'LEADER') return LEADER_TABS.includes(t.id);
+                    return CITIZEN_TABS.includes(t.id);
+                }).map(tab => (
                     <TouchableOpacity
                         key={tab.id}
                         style={[styles.tabButton, activeTab === tab.id && styles.tabActive]}
@@ -123,8 +136,7 @@ export default function App() {
                             color={activeTab === tab.id ? '#007AFF' : '#888'}
                         />
                         <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
-                            {tab.id === 'representative' && user?.role === 'LEADER' ? 'Rep Portal' : 
-                             tab.id === 'admin_dash' ? 'Admin' : tab.label}
+                            {tab.id === 'representative' && user?.role === 'LEADER' ? 'Rep Portal' : tab.label}
                         </Text>
                     </TouchableOpacity>
                 ))}

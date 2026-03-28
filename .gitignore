@@ -227,3 +227,11 @@ debug_output.txt
 cleanup_db_scores.py
 check_nelson_stances.py
 ollama_models.txt
+judging_1.md
+performance_audit.md
+decision_making_log.md
+frontend_mobile_readme.md
+DATA_SAFETY_OVERVIEW.md
+check_hansard_segments.py
+list_docs_for_chat.py
+verify_formatting.py

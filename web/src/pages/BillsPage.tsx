@@ -49,8 +49,10 @@ export const BillsPage: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchBills();
-    }, []);
+        if (token !== undefined) {
+            fetchBills();
+        }
+    }, [token]);
 
     const handleAnalyze = async (billId: number, rawText: string) => {
         setAnalyzingId(billId);
@@ -267,37 +269,6 @@ export const BillsPage: React.FC = () => {
                                 )}
                             </div>
 
-                            {bill.impacts && bill.impacts.length > 0 ? (
-                                <div>
-                                    <h3 style={{ fontSize: '1.1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-                                        AI Archetype Analysis
-                                    </h3>
-                                    {bill.impacts.map(impact => (
-                                        <ImpactCard key={impact.id} impact={impact} />
-                                    ))}
-                                    <div style={{ marginTop: '1rem', width: '200px' }}>
-                                        <Button
-                                            label={analyzingId === bill.id ? "Re-Analyzing..." : "Refresh Analysis"}
-                                            onPress={() => handleAnalyze(bill.id, bill.summary)}
-                                            loading={analyzingId === bill.id}
-                                            variant="outline"
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                <div style={{ background: '#F2F2F7', padding: '2rem', borderRadius: '12px', textAlign: 'center' }}>
-                                    <p style={{ margin: '0 0 1rem 0', color: '#666' }}>
-                                        This bill hasn't been segmented by the AI Engine yet.
-                                    </p>
-                                    <div style={{ margin: '0 auto', maxWidth: '250px' }}>
-                                        <Button
-                                            label="Run AI Impact Analysis"
-                                            onPress={() => handleAnalyze(bill.id, bill.summary)}
-                                            loading={analyzingId === bill.id}
-                                        />
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     ))}
                 </div>
